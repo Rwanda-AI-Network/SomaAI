@@ -153,7 +153,7 @@ class IngestPipeline:
             # Phase 1: Load document (0-20%)
             self._progress(on_progress, "Loading document", 5)
             if path.suffix.lower() == ".pdf":
-                self._progress(on_progress, "PDF detected. Using forced OCR...", 10)
+                self._progress(on_progress, "PDF detected. Using forced OCR (slow but accurate)...", 10)
                 try:
                     pages = self._load_with_ocr(path)
                     self._progress(on_progress, "OCR Complete", 20)
