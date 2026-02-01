@@ -7,13 +7,13 @@ Uses Decimal for precise floating-point handling.
 from __future__ import annotations
 
 from decimal import Decimal
+
 from pydantic import BaseModel, Field
-from typing import List, Optional
 
 
 class CitationOutput(BaseModel):
     """Citation extracted from LLM response."""
-    
+
     page_number: int = Field(..., description="Page number referenced")
     quote: str = Field(..., description="Quoted text from source")
 
@@ -24,7 +24,7 @@ class GroundedResponse(BaseModel):
     Forces the LLM to explicitly state whether the answer
     is grounded in the provided context.
     """
-    
+
     answer: str = Field(..., description="The answer to the question")
     is_grounded: bool = Field(
         ...,
@@ -36,7 +36,7 @@ class GroundedResponse(BaseModel):
         le=Decimal("1.0"),
         description="Confidence score 0-1 (Decimal precision)"
     )
-    citations: List[CitationOutput] = Field(
+    citations: list[CitationOutput] = Field(
         default_factory=list,
         description="Page citations used in the answer"
     )
@@ -44,13 +44,24 @@ class GroundedResponse(BaseModel):
         "",
         description="Brief reasoning for the answer"
     )
+    analogy: str | None = Field(
+        None,
+        description="Analogy to explain the concept (if requested)"
+    )
+    realworld_context: str | None = Field(
+        None,
+        description="Real-world application (if requested)"
+    )
 
 
 class InsufficientContextResponse(BaseModel):
     """Response when context is insufficient."""
-    
+
     answer: str = Field(
-        default="I don't have enough information in the curriculum to answer this question.",
+        default=(
+            "I don't have enough information in the curriculum "
+            "to answer this question."
+        ),
     )
     is_grounded: bool = Field(default=False)
     confidence: Decimal = Field(default=Decimal("0.0"))

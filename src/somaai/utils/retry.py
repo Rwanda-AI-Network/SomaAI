@@ -8,8 +8,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable, Type
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ def retry_async(
     max_delay: float = 60.0,
     exponential_base: float = 2.0,
     jitter: bool = True,
-    retryable_exceptions: tuple[Type[Exception], ...] = (Exception,),
+    retryable_exceptions: tuple[type[Exception], ...] = (Exception,),
     on_retry: Callable[[Exception, int], None] | None = None,
 ):
     """Decorator for async functions with exponential backoff retry.
@@ -101,7 +101,7 @@ def retry_sync(
     max_delay: float = 60.0,
     exponential_base: float = 2.0,
     jitter: bool = True,
-    retryable_exceptions: tuple[Type[Exception], ...] = (Exception,),
+    retryable_exceptions: tuple[type[Exception], ...] = (Exception,),
 ):
     """Decorator for sync functions with exponential backoff retry.
 

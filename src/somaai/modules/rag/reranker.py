@@ -18,10 +18,10 @@ from decimal import Decimal
 logger = logging.getLogger(__name__)
 
 # Singleton instance
-_RERANKER_INSTANCE: "Reranker | None" = None
+_RERANKER_INSTANCE: Reranker | None = None
 
 
-def get_reranker() -> "Reranker":
+def get_reranker() -> Reranker:
     """Get singleton reranker instance.
 
     Avoids reloading the model on each request.
@@ -41,11 +41,13 @@ class Reranker:
     MVP Status: DISABLED
     - Returns documents in original retrieval order with simulated scores
     - Saves ~3.5GB in Docker image size (no PyTorch/CUDA)
-    
+
     Post-MVP: Uncomment model loading to enable cross-encoder reranking.
     """
 
-    def __init__(self, model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2") -> None:
+    def __init__(
+        self, model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    ) -> None:
         """Initialize reranker.
 
         Args:
@@ -58,7 +60,7 @@ class Reranker:
     @property
     def model(self):
         """Lazy-load cross-encoder model.
-        
+
         MVP: Model loading is disabled to avoid PyTorch dependency.
         """
         # =========================================================
@@ -79,7 +81,7 @@ class Reranker:
         #     except Exception as e:
         #         logger.error(f"Failed to load reranker model: {e}")
         # =========================================================
-        
+
         # MVP: Always return None (disabled)
         if not self._load_attempted:
             self._load_attempted = True
@@ -89,7 +91,7 @@ class Reranker:
     @property
     def is_available(self) -> bool:
         """Check if reranker model is available.
-        
+
         MVP: Always returns False (reranking disabled).
         """
         return self.model is not None
@@ -129,7 +131,9 @@ class Reranker:
                 if "score" in doc:
                     doc["rerank_score"] = Decimal(str(doc["score"]))
                 else:
-                    doc["rerank_score"] = Decimal("1.0") - (Decimal(str(i)) * Decimal("0.01"))
+                    doc["rerank_score"] = Decimal("1.0") - (
+                        Decimal(str(i)) * Decimal("0.01")
+                    )
             return documents[:top_k]
 
         # =========================================================
@@ -151,7 +155,9 @@ class Reranker:
         #
         # # Filter by minimum score if specified
         # if min_score is not None:
-        #     documents = [d for d in documents if d.get("rerank_score", 0) >= min_score]
+        #     documents = [
+        #         d for d in documents if d.get("rerank_score", 0) >= min_score
+        #     ]
         #
         # # Sort by score and return top-k
         # sorted_docs = sorted(
@@ -162,7 +168,9 @@ class Reranker:
         #
         # logger.debug(
         #     f"Reranked {len(documents)} docs, "
-        #     f"top score: {sorted_docs[0]['rerank_score']:.3f}" if sorted_docs else "no docs"
+        #     f"top score: {sorted_docs[0]['rerank_score']:.3f}"
+        #     if sorted_docs
+        #     else "no docs",
         # )
         #
         # return sorted_docs[:top_k]

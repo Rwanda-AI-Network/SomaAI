@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
-from datetime import datetime, timedelta
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from somaai.utils.ids import generate_id
 
@@ -92,13 +92,13 @@ async def init_upload(
     """
     upload_id = generate_id()
     session_dir = CHUNK_DIR / upload_id
-    
+
     try:
         import aiofiles.os
         await aiofiles.os.makedirs(session_dir, exist_ok=True)
     except ImportError:
         session_dir.mkdir(parents=True, exist_ok=True)
-    
+
     session = {
         "upload_id": upload_id,
         "filename": filename,
@@ -108,9 +108,9 @@ async def init_upload(
         "session_dir": str(session_dir),
         "created_at": datetime.utcnow().isoformat(),
     }
-    
+
     await _save_session(upload_id, session)
-    
+
     return {
         "upload_id": upload_id,
         "chunk_size": 5 * 1024 * 1024,  # 5MB recommended chunk size
@@ -136,12 +136,12 @@ async def upload_chunk(
     session = await _get_session(upload_id)
     if not session:
         raise HTTPException(status_code=404, detail="Upload session not found or expired")
-    
+
     session_dir = Path(session["session_dir"])
     chunk_path = session_dir / f"chunk_{chunk_index:05d}"
-    
+
     content = await chunk.read()
-    
+
     try:
         import aiofiles
         async with aiofiles.open(chunk_path, "wb") as f:
@@ -149,14 +149,14 @@ async def upload_chunk(
     except ImportError:
         with open(chunk_path, "wb") as f:
             f.write(content)
-    
+
     # Update received chunks
     if chunk_index not in session["received_chunks"]:
         session["received_chunks"].append(chunk_index)
         await _save_session(upload_id, session)
-    
+
     progress = len(session["received_chunks"]) / session["total_chunks"]
-    
+
     return {
         "upload_id": upload_id,
         "chunk_index": chunk_index,
@@ -179,25 +179,25 @@ async def complete_upload(upload_id: str) -> dict:
     session = await _get_session(upload_id)
     if not session:
         raise HTTPException(status_code=404, detail="Upload session not found or expired")
-    
+
     session_dir = Path(session["session_dir"])
     filename = session["filename"]
-    
+
     # Check all chunks received
     expected = set(range(session["total_chunks"]))
     received = set(session["received_chunks"])
     missing = expected - received
-    
+
     if missing:
         raise HTTPException(
             status_code=400,
             detail=f"Missing chunks: {sorted(list(missing)[:10])}{'...' if len(missing) > 10 else ''}",
         )
-    
+
     # Reassemble chunks
     chunks = sorted(session_dir.glob("chunk_*"))
     final_path = session_dir / filename
-    
+
     try:
         import aiofiles
         async with aiofiles.open(final_path, "wb") as out:
@@ -209,16 +209,16 @@ async def complete_upload(upload_id: str) -> dict:
             for chunk_path in chunks:
                 with open(chunk_path, "rb") as inp:
                     out.write(inp.read())
-    
+
     # Cleanup chunk files
     for chunk_path in chunks:
         chunk_path.unlink()
-    
+
     # Remove session from Redis
     await _delete_session(upload_id)
-    
+
     logger.info(f"Completed chunked upload: {upload_id} -> {final_path}")
-    
+
     return {
         "upload_id": upload_id,
         "file_path": str(final_path),
@@ -240,27 +240,27 @@ async def cancel_upload(upload_id: str) -> dict:
     session = await _get_session(upload_id)
     if not session:
         raise HTTPException(status_code=404, detail="Upload session not found or expired")
-    
+
     session_dir = Path(session["session_dir"])
-    
+
     # Delete all chunk files
     for chunk_path in session_dir.glob("chunk_*"):
         try:
             chunk_path.unlink()
         except Exception:
             pass
-    
+
     # Try to remove directory
     try:
         session_dir.rmdir()
     except OSError:
         pass
-    
+
     # Remove session from Redis
     await _delete_session(upload_id)
-    
+
     logger.info(f"Cancelled chunked upload: {upload_id}")
-    
+
     return {
         "upload_id": upload_id,
         "status": "cancelled",

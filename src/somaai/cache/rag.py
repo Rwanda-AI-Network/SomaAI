@@ -80,7 +80,7 @@ class EmbeddingCache:
             redis = await self._get_redis()
             if not redis:
                 return
-            
+
             from somaai.utils.serialization import json_serializer
 
             key = self._make_key(query)

@@ -12,10 +12,40 @@ from __future__ import annotations
 
 import re
 from decimal import Decimal
-from typing import List
 
 # Minimum chunk length (characters)
 MIN_CHUNK_LENGTH = 50
+
+def is_garbage_text(text: str) -> bool:
+    """Check if text appears to be garbage/corrupted.
+    
+    Detects:
+    - Fragmented text (C h a r)
+    - Missing spaces (LongStringOfGarbage)
+    """
+    if not text:
+        return True
+        
+    words = text.split()
+    if not words:
+        return True
+        
+    avg_len = sum(len(w) for w in words) / len(words)
+    
+    # Heuristics
+    if avg_len < 1.5: return True  # Fragmented
+    if avg_len > 25: return True   # Missing spaces/Garbage
+    
+    # Check vowel ratio (English is typically ~40%, garbage is often low)
+    vowels = set("aeiouAEIOU")
+    vowel_count = sum(1 for c in text if c in vowels)
+    if len(text) > 0:
+        vowel_ratio = vowel_count / len(text)
+        if vowel_ratio < 0.2:
+            return True
+    
+    return False
+
 
 # Maximum whitespace ratio
 MAX_WHITESPACE_RATIO = Decimal("0.5")
@@ -91,6 +121,13 @@ def calculate_quality_score(text: str) -> Decimal:
     if is_boilerplate(text):
         score *= Decimal("0.1")
 
+    # Avg word length penalty (detects "C h a r a c t e r" spacing artifacts)
+    words = text.split()
+    if words:
+        avg_word_len = sum(len(w) for w in words) / len(words)
+        if avg_word_len < 1.5:
+            score *= Decimal("0.1")
+
     return max(Decimal("0.0"), min(Decimal("1.0"), score))
 
 
@@ -116,7 +153,14 @@ def filter_chunks(
     filtered = []
 
     for chunk in chunks:
-        content = chunk.page_content if hasattr(chunk, "page_content") else str(chunk)
+        raw_content = chunk.page_content if hasattr(chunk, "page_content") else str(chunk)
+        
+        # Clean content (removes null bytes etc)
+        content = clean_chunk_text(raw_content)
+        
+        # Update chunk content
+        if hasattr(chunk, "page_content"):
+            chunk.page_content = content
 
         # Skip short chunks
         if len(content.strip()) < min_length:
@@ -135,6 +179,7 @@ def filter_chunks(
         if hasattr(chunk, "metadata"):
             chunk.metadata["quality_score"] = round(float(quality), 3)
 
+
         filtered.append(chunk)
 
     return filtered
@@ -149,6 +194,12 @@ def clean_chunk_text(text: str) -> str:
     Returns:
         Cleaned text
     """
+    if not text:
+        return ""
+
+    # Remove null bytes (Critical for Postgres)
+    text = text.replace("\x00", "")
+
     # Remove multiple blank lines
     text = re.sub(r"\n{3,}", "\n\n", text)
 

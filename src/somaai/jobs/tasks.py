@@ -41,9 +41,10 @@ async def ingest_document_task(
         title: Optional document title
     """
     import asyncio
-    from somaai.modules.ingest.pipeline import IngestPipeline
-    from somaai.db.session import async_session_maker
+
     from somaai.db import crud
+    from somaai.db.session import async_session_maker
+    from somaai.modules.ingest.pipeline import IngestPipeline
     from somaai.settings import settings
 
     try:

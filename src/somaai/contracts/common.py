@@ -68,6 +68,7 @@ class Sufficiency(str, Enum):
 
     SUFFICIENT = "sufficient"
     INSUFFICIENT = "insufficient"
+    PARTIAL = "partial"
 
 
 class JobStatus(str, Enum):

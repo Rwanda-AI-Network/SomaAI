@@ -6,11 +6,13 @@ Protects against prompt injection and other input-based attacks.
 from __future__ import annotations
 
 import re
-from typing import Pattern
+from re import Pattern
 
 # Patterns that may indicate prompt injection attempts
 INJECTION_PATTERNS: list[Pattern] = [
-    re.compile(r"ignore\s+(all\s+)?(previous|above|prior)\s+(instructions?|prompts?)", re.I),
+    re.compile(
+        r"ignore\s+(all\s+)?(previous|above|prior)\s+(instructions?|prompts?)", re.I
+    ),
     re.compile(r"disregard\s+(the\s+)?(above|previous|system)", re.I),
     re.compile(r"forget\s+(everything|all|your)\s+(instructions?|rules?)", re.I),
     re.compile(r"you\s+are\s+now\s+(a|an|the)", re.I),
@@ -69,7 +71,9 @@ class InputSanitizer:
             if pattern.search(query):
                 if self.log_blocked:
                     import logging
-                    logging.warning(f"Potential prompt injection blocked: {query[:100]}...")
+                    logging.warning(
+                        f"Potential prompt injection blocked: {query[:100]}..."
+                    )
 
                 if self.block_injections:
                     raise ValueError("Query contains potentially harmful content")

@@ -154,7 +154,6 @@ class SimpleCache:
     MAX_ENTRIES = 1000  # Prevent unbounded growth
 
     def __init__(self):
-        import time
         self._cache: dict[str, tuple[float, any]] = {}  # {key: (expires_at, value)}
         self._access_order: list[str] = []  # For LRU eviction
 
@@ -182,10 +181,10 @@ class SimpleCache:
             @wraps(func)
             async def wrapper(*args, **kwargs):
                 self._evict_expired()
-                
+
                 key = _build_key(func.__name__, *args, **kwargs)
                 now = time.time()
-                
+
                 if key in self._cache:
                     expires_at, value = self._cache[key]
                     if expires_at > now:
@@ -199,14 +198,14 @@ class SimpleCache:
                         self._cache.pop(key, None)
 
                 result = await func(*args, **kwargs)
-                
+
                 # Evict LRU if needed
                 self._evict_lru()
-                
+
                 # Store with expiration
                 self._cache[key] = (now + ttl, result)
                 self._access_order.append(key)
-                
+
                 return result
 
             return wrapper

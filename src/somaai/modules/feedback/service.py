@@ -26,7 +26,7 @@ class FeedbackService:
     async def submit_feedback(
         self,
         request: FeedbackRequest,
-        actor_id: str | None = None,
+        actor_id: str,
     ) -> FeedbackResponse:
         """Submit feedback for a message.
 

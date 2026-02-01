@@ -2,9 +2,8 @@ import asyncio
 
 from sqlalchemy import select
 
-from somaai.db.session import async_session_maker
 from somaai.db.models import Grade, Subject
-
+from somaai.db.session import async_session_maker
 
 GRADES = [
     {"id": "P6", "name": "Primary 6", "level": "primary", "display_order": 6},

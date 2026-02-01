@@ -8,11 +8,11 @@ from somaai.contracts.common import GradeLevel, Subject, Sufficiency, UserRole
 
 
 class Preferences(BaseModel):
-    enable_analogy: bool = Field(
-        default=False, description="Include analogy in response"
+    enable_analogy: bool | None = Field(
+        default=None, description="Include analogy in response"
     )
-    enable_realworld: bool = Field(
-        default=False, description="Include real-world context"
+    enable_realworld: bool | None = Field(
+        default=None, description="Include real-world context"
     )
 
 
@@ -35,9 +35,7 @@ class ChatRequest(BaseModel):
         None, description="Teaching classes for teachers only"
     )
     preferences: Preferences = Field(
-        default_factory=lambda: Preferences(
-            enable_analogy=False, enable_realworld=False
-        ),
+        default_factory=Preferences,
         description="User preferences for context",
     )
 
@@ -100,3 +98,7 @@ class MessageResponse(BaseModel):
         default_factory=list, description="Source citations"
     )
     created_at: datetime = Field(..., description="Message timestamp")
+
+
+#### issues:::
+# 1. created_at --- time should be kigali time utc()

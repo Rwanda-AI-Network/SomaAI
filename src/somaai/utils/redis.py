@@ -14,9 +14,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Singleton instances
-_REDIS_GENERAL: "aioredis.Redis | None" = None
-_REDIS_JOBS: "aioredis.Redis | None" = None
-_REDIS_CACHE: "aioredis.Redis | None" = None
+_REDIS_GENERAL: aioredis.Redis | None = None
+_REDIS_JOBS: aioredis.Redis | None = None
+_REDIS_CACHE: aioredis.Redis | None = None
 
 
 def parse_redis_url(url: str) -> tuple[str, int, int, str | None]:
@@ -62,7 +62,7 @@ async def get_redis_client(
     url: str,
     decode_responses: bool = True,
     max_connections: int = 10,
-) -> "aioredis.Redis":
+) -> aioredis.Redis:
     """Create Redis client from URL.
 
     Args:
@@ -92,7 +92,7 @@ async def get_redis_client(
     )
 
 
-async def get_general_redis() -> "aioredis.Redis":
+async def get_general_redis() -> aioredis.Redis:
     """Get singleton Redis client for general use (db/0).
 
     Returns:
@@ -106,7 +106,7 @@ async def get_general_redis() -> "aioredis.Redis":
     return _REDIS_GENERAL
 
 
-async def get_jobs_redis() -> "aioredis.Redis":
+async def get_jobs_redis() -> aioredis.Redis:
     """Get singleton Redis client for job queue (db/1).
 
     Returns:
@@ -115,13 +115,15 @@ async def get_jobs_redis() -> "aioredis.Redis":
     global _REDIS_JOBS
     if _REDIS_JOBS is None:
         from somaai.settings import settings
-        url = getattr(settings, "redis_jobs_url", settings.redis_url.replace("/0", "/1"))
+        url = getattr(
+            settings, "redis_jobs_url", settings.redis_url.replace("/0", "/1")
+        )
         logger.info(f"Creating jobs Redis client: {url}")
         _REDIS_JOBS = await get_redis_client(url)
     return _REDIS_JOBS
 
 
-async def get_cache_redis() -> "aioredis.Redis":
+async def get_cache_redis() -> aioredis.Redis:
     """Get singleton Redis client for RAG cache (db/2).
 
     Returns:
@@ -130,7 +132,9 @@ async def get_cache_redis() -> "aioredis.Redis":
     global _REDIS_CACHE
     if _REDIS_CACHE is None:
         from somaai.settings import settings
-        url = getattr(settings, "redis_cache_url", settings.redis_url.replace("/0", "/2"))
+        url = getattr(
+            settings, "redis_cache_url", settings.redis_url.replace("/0", "/2")
+        )
         logger.info(f"Creating cache Redis client: {url}")
         _REDIS_CACHE = await get_redis_client(url, decode_responses=True)
     return _REDIS_CACHE
@@ -150,7 +154,7 @@ async def close_redis_connections() -> None:
     logger.info("Closed all Redis connections")
 
 
-async def ping_redis(client: "aioredis.Redis") -> bool:
+async def ping_redis(client: aioredis.Redis) -> bool:
     """Check if Redis connection is alive.
 
     Args:

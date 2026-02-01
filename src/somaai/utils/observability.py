@@ -7,9 +7,9 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from contextlib import contextmanager
 from functools import wraps
-from typing import Any, Callable
 
 # Configure structured logging
 logging.basicConfig(
@@ -23,7 +23,6 @@ class MetricsCollector:
 
     In production, this would push to Prometheus/Datadog/etc.
     For now, logs metrics for debugging.
-    
     Memory-bounded: limits histogram samples to prevent unbounded growth.
     """
 
@@ -45,7 +44,9 @@ class MetricsCollector:
         key = f"{name}:{tags}" if tags else name
         self._counters[key] = self._counters.get(key, 0) + value
 
-    def record_latency(self, name: str, latency_ms: float, tags: dict | None = None) -> None:
+    def record_latency(
+        self, name: str, latency_ms: float, tags: dict | None = None
+    ) -> None:
         """Record a latency measurement.
 
         Args:
@@ -56,13 +57,13 @@ class MetricsCollector:
         key = f"{name}:{tags}" if tags else name
         if key not in self._histograms:
             self._histograms[key] = []
-        
+
         # Bounded: keep only recent samples to prevent memory growth
         if len(self._histograms[key]) >= self.MAX_HISTOGRAM_SAMPLES:
             # Remove oldest 10% to make room
             trim_count = self.MAX_HISTOGRAM_SAMPLES // 10
             self._histograms[key] = self._histograms[key][trim_count:]
-        
+
         self._histograms[key].append(latency_ms)
 
         # Log for observability
@@ -87,7 +88,11 @@ class MetricsCollector:
             "min": min(values),
             "max": max(values),
             "p50": sorted(values)[len(values) // 2],
-            "p95": sorted(values)[int(len(values) * 0.95)] if len(values) > 20 else max(values),
+            "p95": (
+                sorted(values)[int(len(values) * 0.95)]
+                if len(values) > 20
+                else max(values)
+            ),
         }
 
 

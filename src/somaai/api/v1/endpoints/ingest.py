@@ -14,7 +14,6 @@ from somaai.db import crud
 from somaai.db.session import async_session_maker
 from somaai.jobs.queue import enqueue_job, get_job_status
 from somaai.providers.storage import get_storage
-from somaai.settings import settings
 from somaai.utils.ids import generate_id
 
 # Rate limiting setup
@@ -31,7 +30,7 @@ router = APIRouter(prefix="/ingest", tags=["ingest"])
 
 # Allowed file extensions
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".md"}
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 
 
 def validate_file(file: UploadFile) -> None:

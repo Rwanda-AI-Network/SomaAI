@@ -17,7 +17,6 @@ from somaai.modules.rag.prompts import (
     get_prompt_for_role,
 )
 from somaai.modules.rag.schemas import (
-    GroundedResponse,
     parse_grounded_response,
     validate_citations,
 )
@@ -43,7 +42,7 @@ class LLMGenerator(BaseGenerator):
     with curriculum context and validates citations.
     """
 
-    def __init__(self, settings: "Settings | None" = None) -> None:
+    def __init__(self, settings: Settings | None = None) -> None:
         """Initialize generator."""
         self._settings = settings
         self._llm = None
@@ -73,6 +72,7 @@ class LLMGenerator(BaseGenerator):
         include_analogy: bool = False,
         include_realworld: bool = False,
         retrieved_docs: list[dict] | None = None,
+        history: str = "",
     ) -> dict:
         """Generate response with structured output.
 
@@ -84,6 +84,7 @@ class LLMGenerator(BaseGenerator):
             include_analogy: Include analogy
             include_realworld: Include real-world examples
             retrieved_docs: Original docs for citation validation
+            history: Previous chat history
 
         Returns:
             Dict with answer, sufficiency, citations, validation status
@@ -99,13 +100,28 @@ class LLMGenerator(BaseGenerator):
             grade=grade,
             include_analogy=include_analogy,
             include_realworld=include_realworld,
+            history=history,
         )
 
         # Add system prompt
         full_prompt = f"{SYSTEM_PROMPT}\n\n{prompt}"
 
         # Generate response
-        response = await self.llm.generate(full_prompt)
+        try:
+            response = await self.llm.generate(full_prompt)
+        except Exception as e:
+            logger.error(f"LLM generation failed: {str(e)}")
+            return {
+                "answer": "I encountered an error while processing your request. Please try refining your question.",
+                "sufficiency": "insufficient",
+                "is_grounded": False,
+                "confidence": 0.0,
+                "citations_validated": [],
+                "citations_all_valid": False,
+                "reasoning": "",
+                "analogy": None,
+                "realworld_context": None,
+            }
 
         # Try to parse structured output
         parsed = parse_grounded_response(response)
@@ -146,8 +162,8 @@ class LLMGenerator(BaseGenerator):
                 "citations_validated": validated_citations,
                 "citations_all_valid": citations_valid,
                 "reasoning": parsed.reasoning,
-                "analogy": None,
-                "realworld_context": None,
+                "analogy": parsed.analogy,
+                "realworld_context": parsed.realworld_context,
             }
 
         # Fallback: unstructured response
@@ -201,7 +217,7 @@ class LLMGenerator(BaseGenerator):
 class CombinedGenerator(BaseGenerator):
     """Synthesizes multiple generation strategies into a unified response."""
 
-    def __init__(self, settings: "Settings | None" = None) -> None:
+    def __init__(self, settings: Settings | None = None) -> None:
         self._generator = LLMGenerator(settings)
 
     async def generate(
@@ -213,6 +229,7 @@ class CombinedGenerator(BaseGenerator):
         include_analogy: bool = False,
         include_realworld: bool = False,
         retrieved_docs: list[dict] | None = None,
+        history: str = "",
     ) -> dict:
         """Generate combined response.
 
@@ -224,6 +241,7 @@ class CombinedGenerator(BaseGenerator):
             include_analogy: Include analogy
             include_realworld: Include real-world
             retrieved_docs: Original docs for citation validation
+            history: Previous chat history
 
         Returns:
             Complete response dict
@@ -237,4 +255,5 @@ class CombinedGenerator(BaseGenerator):
             include_analogy=include_analogy,
             include_realworld=include_realworld,
             retrieved_docs=retrieved_docs,
+            history=history,
         )

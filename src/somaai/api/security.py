@@ -11,10 +11,10 @@ from __future__ import annotations
 import hashlib
 import time
 from collections import defaultdict
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable
 
-from fastapi import Depends, HTTPException, Request, Security
+from fastapi import HTTPException, Request, Security
 from fastapi.security import APIKeyHeader
 
 # API key header
@@ -147,14 +147,14 @@ def get_client_id(request: Request) -> str:
     api_key = request.headers.get("X-API-Key")
     if api_key:
         return f"key:{hashlib.sha256(api_key.encode()).hexdigest()[:16]}"
-    
+
     # Fall back to IP
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
         ip = forwarded.split(",")[0].strip()
     else:
         ip = request.client.host if request.client else "unknown"
-    
+
     return f"ip:{ip}"
 
 

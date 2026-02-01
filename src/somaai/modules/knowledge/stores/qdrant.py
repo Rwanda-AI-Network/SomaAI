@@ -9,10 +9,11 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_openai import OpenAIEmbeddings
 from langchain_qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
-from qdrant_client.models import Filter, FieldCondition, MatchValue
+from qdrant_client.models import FieldCondition, Filter, MatchValue
 
 from somaai.modules.knowledge.vectorstore import VectorStore
 from somaai.utils.files import compute_file_hash
@@ -25,10 +26,10 @@ logger = logging.getLogger(__name__)
 
 # Singleton client for connection pooling
 _QDRANT_CLIENT: QdrantClient | None = None
-_EMBEDDINGS_MODEL: OpenAIEmbeddings | None = None
+_EMBEDDINGS_MODEL: HuggingFaceEmbeddings | OpenAIEmbeddings | None = None
 
 
-def get_qdrant_client(settings: "Settings") -> QdrantClient:
+def get_qdrant_client(settings: Settings) -> QdrantClient:
     """Get singleton Qdrant client (connection pooling).
 
     Args:
@@ -48,22 +49,30 @@ def get_qdrant_client(settings: "Settings") -> QdrantClient:
     return _QDRANT_CLIENT
 
 
-def get_embeddings_model(settings: "Settings") -> OpenAIEmbeddings:
+def get_embeddings_model(settings: Settings) -> HuggingFaceEmbeddings | OpenAIEmbeddings:
     """Get singleton embeddings model.
 
     Args:
         settings: Application settings
 
     Returns:
-        Shared OpenAIEmbeddings instance
+        Shared Embeddings instance
     """
     global _EMBEDDINGS_MODEL
     if _EMBEDDINGS_MODEL is None:
-        logger.info("Creating OpenAI embeddings model")
-        _EMBEDDINGS_MODEL = OpenAIEmbeddings(
-            api_key=settings.openai_api_key,
-            model="text-embedding-3-small",
-        )
+        if settings.openai_api_key:
+            logger.info("Creating OpenAI embeddings model")
+            _EMBEDDINGS_MODEL = OpenAIEmbeddings(
+                api_key=settings.openai_api_key,
+                model="text-embedding-3-small",
+            )
+        else:
+            logger.info("Creating HuggingFace embeddings model (local)")
+            _EMBEDDINGS_MODEL = HuggingFaceEmbeddings(
+                model_name="all-MiniLM-L6-v2",
+                model_kwargs={'device': 'cpu'},
+                encode_kwargs={'normalize_embeddings': True}
+            )
     return _EMBEDDINGS_MODEL
 
 
@@ -77,7 +86,7 @@ class QdrantStore(VectorStore):
     - Metadata filtering (grade, subject)
     """
 
-    def __init__(self, settings: "Settings") -> None:
+    def __init__(self, settings: Settings) -> None:
         """Initialize Qdrant store.
 
         Args:
@@ -92,7 +101,7 @@ class QdrantStore(VectorStore):
         return get_qdrant_client(self.settings)
 
     @property
-    def embeddings(self) -> OpenAIEmbeddings:
+    def embeddings(self) -> HuggingFaceEmbeddings | OpenAIEmbeddings:
         """Get singleton embeddings model."""
         return get_embeddings_model(self.settings)
 
@@ -100,9 +109,35 @@ class QdrantStore(VectorStore):
     def store(self) -> QdrantVectorStore:
         """Get vector store."""
         if self._store is None:
+            collection_name = self.settings.qdrant_collection_name
+
+            # Ensure collection exists
+            if not self.client.collection_exists(collection_name):
+                logger.info(f"Collection {collection_name} not found, creating...")
+
+                # Determine dimension dynamically
+                try:
+                    # Generate a dummy embedding to get dimension
+                    sample_embedding = self.embeddings.embed_query("test")
+                    dimension = len(sample_embedding)
+                    logger.info(f"Detected embedding dimension: {dimension}")
+
+                    from qdrant_client.models import Distance, VectorParams
+                    self.client.create_collection(
+                        collection_name=collection_name,
+                        vectors_config=VectorParams(
+                            size=dimension,
+                            distance=Distance.COSINE
+                        )
+                    )
+                    logger.info(f"Created collection {collection_name}")
+                except Exception as e:
+                    logger.error(f"Failed to create collection: {e}")
+                    # Let downstream fail if needed
+
             self._store = QdrantVectorStore(
                 client=self.client,
-                collection_name=self.settings.qdrant_collection_name,
+                collection_name=collection_name,
                 embedding=self.embeddings,
             )
         return self._store
@@ -187,7 +222,7 @@ class QdrantStore(VectorStore):
 
         try:
             # Use should filter with multiple OR conditions
-            from qdrant_client.models import Filter, FieldCondition, MatchAny
+            from qdrant_client.models import FieldCondition, Filter, MatchAny
 
             results = self.client.scroll(
                 collection_name=self.settings.qdrant_collection_name,
@@ -297,16 +332,24 @@ class QdrantStore(VectorStore):
         Returns:
             List of documents with scores
         """
-        filter_conditions = {}
+        from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+        must_conditions = []
         if grade:
-            filter_conditions["grade"] = grade
+            must_conditions.append(
+                FieldCondition(key="grade", match=MatchValue(value=grade))
+            )
         if subject:
-            filter_conditions["subject"] = subject
+            must_conditions.append(
+                FieldCondition(key="subject", match=MatchValue(value=subject))
+            )
+
+        qdrant_filter = Filter(must=must_conditions) if must_conditions else None
 
         docs = await self.store.asimilarity_search_with_score(
             query,
             k=top_k,
-            filter=filter_conditions if filter_conditions else None,
+            filter=qdrant_filter,
         )
 
         return [

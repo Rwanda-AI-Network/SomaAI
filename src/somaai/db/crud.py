@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from somaai.db.models import Document, Job
 
-
 # ====================
 # Job CRUD Operations
 # ====================
@@ -85,17 +84,17 @@ async def update_job_status(
     job = await get_job(db, job_id)
     if not job:
         return None
-    
+
     job.status = status
     job.progress_pct = progress_pct
     job.result_id = result_id
     job.error = error
-    
+
     if status == "running" and not job.started_at:
         job.started_at = datetime.utcnow()
     elif status in ("completed", "failed"):
         job.completed_at = datetime.utcnow()
-    
+
     await db.commit()
     return job
 
@@ -118,7 +117,7 @@ async def update_job_progress(
     job = await get_job(db, job_id)
     if not job:
         return None
-    
+
     job.progress_pct = progress_pct
     await db.commit()
     return job
@@ -217,7 +216,7 @@ async def update_document_processed(
     doc = await get_document(db, doc_id)
     if not doc:
         return None
-    
+
     doc.processed_at = datetime.utcnow()
     doc.page_count = page_count
     await db.commit()
@@ -252,10 +251,10 @@ async def create_chunks(
         List of created chunk IDs
     """
     from somaai.db.models import Chunk
-    
+
     if not chunks:
         return []
-    
+
     # Build all chunk objects first
     chunk_objects = [
         Chunk(
@@ -269,11 +268,11 @@ async def create_chunks(
         )
         for chunk_data in chunks
     ]
-    
+
     # Bulk insert (single roundtrip)
     db.add_all(chunk_objects)
     await db.commit()
-    
+
     return [c.id for c in chunk_objects]
 
 
@@ -288,7 +287,7 @@ async def get_chunk(db: AsyncSession, chunk_id: str):
         Chunk instance if found, None otherwise
     """
     from somaai.db.models import Chunk
-    
+
     result = await db.execute(select(Chunk).where(Chunk.id == chunk_id))
     return result.scalar_one_or_none()
 
@@ -304,7 +303,7 @@ async def get_chunks_by_document(db: AsyncSession, document_id: str) -> list:
         List of Chunk instances
     """
     from somaai.db.models import Chunk
-    
+
     result = await db.execute(
         select(Chunk)
         .where(Chunk.document_id == document_id)

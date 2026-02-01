@@ -58,8 +58,8 @@ class Document(Base):
     subject = Column(String(50), nullable=False, index=True)
     page_count = Column(Integer, default=0)
     metadata_json = Column(JSON, nullable=True)
-    uploaded_at = Column(DateTime, server_default=func.now())
-    processed_at = Column(DateTime, nullable=True)
+    uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
+    processed_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     chunks = relationship(
@@ -88,7 +88,7 @@ class Chunk(Base):
     page_end = Column(Integer, nullable=False)
     chunk_index = Column(Integer, nullable=False)
     embedding_id = Column(String(100), nullable=True)
-    created_at = Column(DateTime, server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
     document = relationship("Document", back_populates="chunks")
@@ -115,7 +115,7 @@ class Message(Base):
     subject = Column(String(50), nullable=False, index=True)
     analogy = Column(Text, nullable=True)
     realworld_context = Column(Text, nullable=True)
-    created_at = Column(DateTime, server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
     citations = relationship(
@@ -170,7 +170,7 @@ class Topic(Base):
     page_end = Column(Integer, nullable=False)
     path = Column(JSON, nullable=False, default=list)
     # display_order = Column(Integer, default=0)
-    created_at = Column(DateTime, server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class TeacherProfile(Base):
@@ -186,8 +186,8 @@ class TeacherProfile(Base):
     classes_taught = Column(JSON, default=list)
     analogy_enabled = Column(Boolean, default=True)
     realworld_enabled = Column(Boolean, default=True)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
 class Feedback(Base):
@@ -211,8 +211,8 @@ class Feedback(Base):
     text = Column(Text, nullable=True)
     tags = Column(JSON, default=list)
     user_role = Column(String(20), nullable=True)  # student or teacher
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     message = relationship("Message", back_populates="feedback")
 
@@ -238,8 +238,8 @@ class Quiz(Base):
     include_answer_key = Column(Boolean, default=True)
     status = Column(String(20), default="pending")
     error = Column(Text, nullable=True)
-    created_at = Column(DateTime, server_default=func.now())
-    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
 
     items = relationship(
         "QuizItem", back_populates="quiz", cascade="all, delete-orphan"
@@ -266,7 +266,7 @@ class QuizItem(Base):
     answer_citations = Column(JSON, default=list)
     order = Column(Integer, nullable=False)
     options = Column(JSON, nullable=True)
-    created_at = Column(DateTime, server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     quiz = relationship("Quiz", back_populates="items")
 
@@ -286,6 +286,6 @@ class Job(Base):
     progress_pct = Column(Integer, default=0)
     result_id = Column(String(36), nullable=True)
     error = Column(Text, nullable=True)
-    created_at = Column(DateTime, server_default=func.now())
-    started_at = Column(DateTime, nullable=True)
-    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)

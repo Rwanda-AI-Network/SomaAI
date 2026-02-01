@@ -1,4 +1,4 @@
-"""Vector store interface."""
+"""Vector store interface. - we are using qdrant"""
 
 from abc import ABC, abstractmethod
 

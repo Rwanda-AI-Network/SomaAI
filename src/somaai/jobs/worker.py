@@ -44,6 +44,7 @@ def _get_redis_settings():
     Must be called at class definition time to set the class attribute.
     """
     from arq.connections import RedisSettings
+
     from somaai.settings import settings
 
     # Parse Redis URL for jobs database
@@ -100,9 +101,9 @@ def run_worker() -> None:
         python -m somaai.jobs.worker
     """
     from arq import run_worker as arq_run_worker
-    
+
     logger.info("Starting ARQ worker...")
-    
+
     # run_worker is synchronous and manages its own event loop
     arq_run_worker(WorkerSettings)
 

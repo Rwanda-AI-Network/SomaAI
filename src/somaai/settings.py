@@ -5,6 +5,7 @@ Uses Decimal for high-precision numeric configuration.
 """
 
 from decimal import Decimal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -52,7 +53,7 @@ class Settings(BaseSettings):
     cache_embedding_ttl: int = 3600  # Embedding cache: 1 hour
     cache_retrieval_ttl: int = 3600
     cache_session_ttl: int = 3600
-    
+
     # Cache quality thresholds
     response_cache_min_confidence: Decimal = Decimal("0.7")
 
@@ -70,7 +71,7 @@ class Settings(BaseSettings):
     huggingface_model: str = ""
     openai_api_key: str | None = None
     openai_model: str = ""
-    
+
     # Security
     require_api_key: bool = False  # Enable in production
 

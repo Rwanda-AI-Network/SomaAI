@@ -140,7 +140,8 @@ class Retriever:
         if subject:
             logger.info(f"Fallback: removing subject filter for '{query[:50]}...'")
             docs = await self.retrieve(query, top_k, grade, None)
-            docs = self._filter_by_score(docs, min_score)
+            # Relax score slightly for cross-subject search
+            docs = self._filter_by_score(docs, min_score * Decimal("0.8"))
 
             if len(docs) >= min_results:
                 for doc in docs:
@@ -217,7 +218,9 @@ class Retriever:
         char_limit = max_tokens * 4  # Rough char-to-token ratio
 
         for doc in docs:
-            source = f"[{doc['metadata'].get('title', 'Source')}, Page {doc['metadata'].get('page_start', '?')}]"
+            title = doc['metadata'].get('title', 'Source')
+            page = doc['metadata'].get('page_start', '?')
+            source = f"[{title}, Page {page}]"
             chunk = f"{source}\n{doc['content']}\n"
 
             if total_chars + len(chunk) > char_limit:
@@ -236,7 +239,7 @@ class Retriever:
         """
         try:
             # Try a simple retrieval
-            docs = await self.retrieve("test query", top_k=1)
+            _ = await self.retrieve("test query", top_k=1)
             return {
                 "status": "healthy",
                 "vector_store": "connected",

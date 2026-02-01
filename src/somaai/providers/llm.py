@@ -19,7 +19,18 @@ class MockLLMProvider:
     """Mock LLM provider for local dev/tests (no API keys needed)."""
 
     async def generate(self, prompt: str) -> str:
-        return "MOCK_ANSWER: " + prompt[:200]
+        import json
+        return json.dumps({
+            "answer": (
+                "MOCK_ANSWER: You are SomaAI, an educational assistant for Rwandan "
+                "students and teachers. You help with curriculum."
+            ),
+            "sufficiency": "sufficient",
+            "is_grounded": True,
+            "confidence": 1.0,
+            "analogy": None,
+            "realworld_context": None
+        })
 
     async def generate_stream(self, prompt: str) -> AsyncIterator[str]:
         text = await self.generate(prompt)
@@ -50,22 +61,35 @@ class OpenAILLMProvider:
 
 
 class GroqLLMProvider:
-    """Groq provider (skeleton)."""
+    """Groq provider implementation."""
 
     def __init__(self, api_key: str, model: str):
-        self.api_key = api_key
+        try:
+            from groq import AsyncGroq
+        except ImportError:
+            raise ImportError("groq package not found. Install with 'pip install groq'")
+
+        self.client = AsyncGroq(api_key=api_key)
         self.model = model
 
     async def generate(self, prompt: str) -> str:
-        raise NotImplementedError("Groq provider not implemented yet")
+        """Generate text using Groq API."""
+        response = await self.client.chat.completions.create(
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            model=self.model,
+            response_format={"type": "json_object"},
+            temperature=0.1,
+        )
+        return response.choices[0].message.content or ""
 
     async def generate_stream(self, prompt: str) -> AsyncIterator[str]:
         raise NotImplementedError("Groq streaming not implemented yet")
-        # unreachable but makes this an async generator for type checking
         yield ""
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        raise NotImplementedError("Groq embeddings not implemented yet")
+        raise NotImplementedError("Groq embeddings not implemented (use local).")
 
 
 def get_llm(settings: Settings) -> LLMClient:

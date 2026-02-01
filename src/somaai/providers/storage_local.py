@@ -18,7 +18,6 @@ from somaai.utils.files import (
     async_safe_write,
     async_write_file,
     compute_file_hash,
-    file_exists,
     generate_unique_path,
     safe_filename,
 )

@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from somaai.contracts.chat import CitationResponse
 from somaai.db.models import Chunk, Document, MessageCitation
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
 
 
 class CitationExtractor:
-    """Extracts and formats citations from retrieved chunks.
+    """Manages citations for chat messages.
 
     Links AI responses to source documents for transparency
     and verification.
@@ -48,8 +49,7 @@ class CitationExtractor:
         RAGPipeline should use this instead of its own _build_citations.
 
         Args:
-            chunks: Retrieved document chunks with metadata
-            top_k: Maximum citations to include
+            chunks: List of chunk dictionaries from RAG pipeline
 
         Returns:
             Tuple of:
@@ -102,7 +102,7 @@ class CitationExtractor:
 
     async def get_message_citations(
         self,
-        db: "AsyncSession",
+        db: AsyncSession,
         message_id: str,
     ) -> list[CitationResponse]:
         """Get citations for a previously saved message.
@@ -143,12 +143,12 @@ class CitationExtractor:
 
     async def save_citations(
         self,
-        db: "AsyncSession",
+        db: AsyncSession,
         message_id: str,
         citations: list[CitationResponse],
         chunks_map: dict[str, str],
     ) -> None:
-        """Persist citations for a message.
+        """Save citations to database linking message to chunks.
 
         Note: This method adds to the session but does NOT commit.
         The caller is responsible for committing the transaction.

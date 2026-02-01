@@ -195,7 +195,7 @@ class SessionManager:
         self,
         user_id: str,
         session_id: str,
-        metadata: dict, 
+        metadata: dict,
     ) -> Session:
         """Update session metadata."""
         session = await self.get_or_create(user_id, session_id)

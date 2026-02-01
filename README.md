@@ -73,7 +73,7 @@ cd SomaAI
 
 cp .env.example .env
 uv sync
-
+```
 
 ### Mock LLM Mode (No API Keys Required)
 
