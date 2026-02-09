@@ -1,42 +1,69 @@
-# SomaAI Architecture
+# SomaAI System Architecture
 
 ## Overview
 
-SomaAI is built as a modular, async-first application designed for scalability. It uses a hybrid storage approach (Redis + PostgreSQL + Qdrant) and an asynchronous job queue for heavy lifting.
+SomaAI is a modular, high-performance RAG (Retrieval-Augmented Generation) platform designed for educational content. It ingests curriculum documents (PDFs), structures them semantically, and provides an intelligent Q&A interface for students and teachers.
 
-## Core Components
+## High-Level Architecture
 
-### 1. API Layer (FastAPI)
-- **Endpoints:** RESTful v1 API with Pydantic validation.
-- **Middleware:** Redis-backed Rate Limiting, CORS, Observability.
-- **Auth:** API Key barrier for protected routes.
+```mermaid
+graph TD
+    Client[Web/Mobile Client] --> API[FastAPI Gateway]
+    
+    subgraph "Core Services"
+        API --> Auth[Auth Module]
+        API --> Chat[Chat Module]
+        API --> Ingest[Ingest Orchestrator]
+    end
+    
+    subgraph "Data & Knowledge"
+        Chat --> RAG[RAG Pipeline]
+        RAG --> Redis[(Redis Cache)]
+        RAG --> Qdrant[(Qdrant Vector DB)]
+        Ingest --> Qdrant
+        Ingest --> PG[(PostgreSQL)]
+    end
+    
+    subgraph "Async Processing"
+        Ingest --> Queue[Redis Job Queue]
+        Queue --> Worker[Celery/ARQ Worker]
+    end
+```
 
-### 2. RAG Module (Intelligence)
-- **Pipeline:** `Retriever` -> `Reranker` -> `Generator`.
-- **Optimization:** Caches embeddings (1h) and high-confidence responses (24h) in Redis (db/2).
-- **Fallback:** Gracefully handles missing context with "insufficient context" responses.
+## Core Modules
 
-### 3. Ingest Module (Data)
-- **Pipeline:** Load -> Chunk -> Filter -> Enrich -> Vector Store.
-- **Performance:** Batched processing (50 chunks) and SHA-256 deduplication.
-- **Scaling:** Uses `aiofiles` and chunked upload protocol for large files.
+### 1. Ingestion Engine (`src/somaai/modules/ingest`)
+Responsible for transforming raw documents into searchable knowledge.
+- **Pipeline**: Stage-based processing (Extract -> Chunk -> Embed -> Store).
+- **Strategy**: Semantic Chunking with header injection to preserve context.
+- **See also**: [Ingestion System Documentation](ingestion.md)
 
-### 4. Job System (Async)
-- **Backend:** ARQ (Redis db/1) for tasks like `ingest_document`, `generate_quiz`.
-- **Worker:** Separate process, scalable via Docker replicas.
-- **Persistence:** Job status/result stored in PostgreSQL `jobs` table.
+### 2. RAG System (`src/somaai/modules/rag`)
+The brain of the application, handling retrieval and generation.
+- **Retrieval**: Dense-only retrieval using Qdrant (Cosine Similarity).
+- **Optimization**: HyDE (Hypothetical Document Embeddings) for better query-doc matching.
+- **Generation**: Context-aware LLM generation with citation support.
+- **See also**: [RAG System Documentation](rag_system.md)
 
-## Data Storage
+### 3. API Layer
+Built on **FastAPI**, providing:
+- Asynchronous request handling.
+- Pydantic-based validation.
+- Dependency Injection for service management.
+- Bearer token authentication.
 
-### PostgreSQL (Persistent State)
-- Users, Profiles, Messages, Feedback, Jobs
-- Indexed for query performance
+## Data Storage Strategy
 
-### Redis (Hot State)
-- **db/0:** Session data (Chat history, Upload sessions), Rate Limits
-- **db/1:** Background Job Queue
-- **db/2:** RAG Cache (Embeddings, Responses)
+| Store | Technology | Purpose |
+| :--- | :--- | :--- |
+| **Vector Store** | **Qdrant** | Stores document embeddings (768d) and metadata. optimized for semantic search. |
+| **Relational DB** | **PostgreSQL** | Stores user data, chat history, and structured document metadata. |
+| **Cache** | **Redis** | **db/0**: Session data, Rate limits.<br>**db/1**: Job Queue.<br>**db/2**: RAG Cache (Embeddings, Responses). |
+| **Object Storage** | **Local/S3** | Stores raw uploaded files (PDFs). |
 
-### Qdrant (Vector Knowledge)
-- Stores document chunks and embeddings (768d)
-- Payload filtering by `grade`, `subject`
+## Key Design Principles
+
+1.  **Modularity**: Each domain (Ingest, RAG, Auth) is isolated in its own module.
+2.  **Async-First**: Heavy operations (Ingestion, Generation) are asynchronous or backgrounded.
+3.  **Type Safety**: Extensive use of Python type hints and Pydantic models.
+4.  **Observability**: Structured logging for all critical pipelines.

@@ -211,3 +211,82 @@ def clean_chunk_text(text: str) -> str:
     text = re.sub(r" {2,}", " ", text)
 
     return text.strip()
+
+
+def calculate_hallucination_risk(chunk) -> float:
+    """
+    Calculate hallucination risk score for a chunk (0.0=safe, 1.0=high risk).
+    
+    Risk factors:
+    - No structure detected: 0.3
+    - OCR extraction method: 0.2
+    - No section context: 0.2
+    - Short content (<100 chars): 0.2
+    - Low extraction confidence: 0.1
+    
+    Args:
+        chunk: LangChain Document chunk
+        
+    Returns:
+        Risk score between 0.0 and 1.0
+    """
+    risk = 0.0
+    metadata = chunk.metadata
+    
+    # Factor 1: No structure detected
+    if not metadata.get("has_structure", True):
+        risk += 0.3
+    
+    # Factor 2: OCR extraction (lower confidence)
+    if metadata.get("extraction_method") == "ocr":
+        risk += 0.2
+    
+    # Factor 3: No section context
+    if not metadata.get("section_title"):
+        risk += 0.2
+    
+    # Factor 4: Very short content
+    if len(chunk.page_content) < 100:
+        risk += 0.2
+    
+    # Factor 5: Low extraction confidence
+    confidence = metadata.get("extraction_confidence", 1.0)
+    risk += (1.0 - confidence) * 0.1
+    
+    return min(risk, 1.0)
+
+
+def filter_by_hallucination_risk(chunks: list, max_risk: float = 0.6) -> list:
+    """
+    Filter chunks by hallucination risk threshold.
+    
+    Args:
+        chunks: List of LangChain Document chunks
+        max_risk: Maximum acceptable risk score (0.0-1.0)
+        
+    Returns:
+        Filtered list of chunks
+    """
+    filtered = []
+    removed_count = 0
+    
+    for chunk in chunks:
+        risk = calculate_hallucination_risk(chunk)
+        
+        if risk <= max_risk:
+            # Add risk score to metadata for monitoring
+            chunk.metadata["hallucination_risk"] = risk
+            filtered.append(chunk)
+        else:
+            removed_count += 1
+    
+    if removed_count > 0:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            f"Filtered {removed_count} high-risk chunks "
+            f"(risk > {max_risk})"
+        )
+    
+    return filtered
+

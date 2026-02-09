@@ -59,6 +59,9 @@ class Settings(BaseSettings):
 
     # Semantic Cache
     # cache_semantic_enabled: bool = True
+    
+    # RAG Settings
+    rag_enable_hyde: bool = False  # Enable Hypothetical Document Embeddings
     # cache_similarity_threshold: float = 0.92
     # cache_embedding_dim: int = 768
     # cache_namespace: str = "somaai"

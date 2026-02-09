@@ -131,38 +131,49 @@ class RAGPipeline:
             else:
                 logger.info("RAG Context - No history provided")
 
-            # 1b. Condense query if history exists
-            search_query = clean_query
-            if history:
-                search_query = await self._condense_query(clean_query, history)
-                logger.info(f"RAG Rewritten Query: {search_query}")
+            # 1. Expand query with chat history
+            # Fix: Call internal method with correct arg order (query, history)
+            search_query = await self._condense_query(clean_query, history)
+            logger.info(f"RAG Rewritten Query: {search_query}")
+            
+            # 1b. HyDE (Hypothetical Document Embeddings)
+            # Generate hypothetical answer for dense search
+            # We use the original expanded query for sparse/keyword search
+            dense_query = None
+            try:
+                if getattr(self.settings, "rag_enable_hyde", True):
+                    # For now, we activate it as requested
+                    dense_query = await self.generator.generate_hypothetical_answer(search_query)
+                    logger.debug(f"HyDE generated: {dense_query[:50]}...")
+                else:
+                    logger.debug("HyDE disabled by settings")
+            except Exception as e:
+                logger.warning(f"HyDE step failed: {e}")
+                dense_query = None
 
-            # 2. Retrieve with fallback strategy
-            docs = await self.retriever.retrieve_with_fallback(
+            # 2. Retrieve relevant documents
+            # We pass dense_query for semantic search, original search_query for BM25
+            docs, context_str = await self.retriever.retrieve_for_context(
                 query=search_query,
+                dense_query=dense_query,
                 grade=grade,
                 subject=subject,
-                top_k=20,
+                use_fallback=True,
             )
 
             # 3. Rerank for relevance (uses singleton)
-            # Use Decimal for precise min_score threshold
-            # Note: If no docs, rerank returns empty list
-            ranked_docs = []
-            if docs:
-                ranked_docs = await self.reranker.rerank(
-                    query=search_query,
-                    documents=docs,
-                    top_k=5,
-                    min_score=Decimal("0.1"),
-                )
+            # User Feedback: Remove Simulated Reranker. Rely on Hybrid Retrieval (RRF) scores.
+            # The retrieval stage (step 2) already returns ranked docs.
+            ranked_docs = docs
+            
+            # 3b. Apply U-Shaped reordering to optimize LLM attention
+            ranked_docs = self._u_shaped_reorder(ranked_docs)
 
             # 4. Check if we have sufficient context
             if not ranked_docs:
-                logger.info("No documents found. Proceeding to generator for potential chit-chat handling.")
-                # We do NOT return insufficient_context here anymore.
-                # We let the Generator handle it (e.g. for greetings).
-                # return self._insufficient_context_response(query, grade, subject)
+                logger.info("No documents found. Returning insufficient context response.")
+                # We return insufficient_context here to avoid hallucinations.
+                return self._insufficient_context_response(query, grade, subject)
 
             # 5. Generate response
             result = await self.generator.generate(
@@ -236,6 +247,10 @@ class RAGPipeline:
         Returns:
             Standalone query or original if rewriting fails
         """
+        if not history or not history.strip():
+            logger.debug("No history provided, skipping query condensation.")
+            return query
+            
         try:
             from somaai.providers.llm import get_llm
             llm = get_llm(self.settings)
@@ -297,6 +312,39 @@ class RAGPipeline:
             "realworld_context": None,
             "created_at": datetime.utcnow(),
         }
+
+    def _u_shaped_reorder(self, docs: list[dict]) -> list[dict]:
+        """Reorder documents in U-shape to optimize LLM attention.
+        
+        Places best documents at start AND end, worst in middle.
+        Addresses "Lost in the Middle" problem where LLMs pay more
+        attention to beginning and end of context.
+        
+        Args:
+            docs: Ranked documents (best first)
+            
+        Returns:
+            Reordered documents [1, 3, 5, ..., 6, 4, 2]
+        """
+        if len(docs) <= 3:
+            return docs
+            
+        reordered = []
+        left = 0
+        right = len(docs) - 1
+        
+        # Alternate: best docs go to start and end
+        while left <= right:
+            if left == right:
+                reordered.append(docs[left])
+            else:
+                reordered.append(docs[left])
+                reordered.append(docs[right])
+            left += 1
+            right -= 1
+            
+        logger.debug(f"U-Shaped reordering: [{', '.join(str(i+1) for i in range(len(docs)))}] → optimized")
+        return reordered
 
     def _build_citations(self, docs: list[dict]) -> tuple[list[dict], dict[str, str]]:
         """Build citations matching CitationResponse schema.
@@ -443,7 +491,7 @@ class MockRAGPipeline:
                 subject=(
                     Subject(subject)
                     if subject in Subject._value2member_map_
-                    else Subject.GENERAL
+                    else Subject.SCIENCE
                 ),
                 user_role=(
                     UserRole(user_role)
