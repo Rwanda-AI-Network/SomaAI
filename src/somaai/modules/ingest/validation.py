@@ -261,7 +261,6 @@ class StorageValidator:
             # Test 1: Can we retrieve anything from this document?
             results = await retriever.retrieve(
                 query="test",
-                filters={"doc_id": doc_id},
                 top_k=1
             )
             

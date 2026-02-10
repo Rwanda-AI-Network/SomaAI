@@ -18,13 +18,86 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def reciprocal_rank_fusion(
+    dense_results: list[dict],
+    sparse_results: list[tuple[str, float]],
+    k: int = 60,
+    alpha: float = 0.5
+) -> list[dict]:
+    """Combine dense and sparse results using Reciprocal Rank Fusion.
+    
+    RRF Formula: score(d) = Σ(1 / (k + rank_i(d)))
+    
+    Args:
+        dense_results: Results from dense retrieval (Qdrant)
+        sparse_results: Results from sparse retrieval (BM25) as (doc_id, score)
+        k: RRF constant (default: 60, standard value)
+        alpha: Weight for dense vs sparse (0=sparse only, 0.5=balanced, 1=dense only)
+        
+    Returns:
+        Fused results sorted by combined score with normalized scores
+        
+    Example:
+        >>> dense = [{'metadata': {'chunk_id': 'doc1'}, 'score': 0.9}]
+        >>> sparse = [('doc1', 15.2), ('doc2', 12.1)]
+        >>> fused = reciprocal_rank_fusion(dense, sparse, k=60, alpha=0.5)
+    """
+    scores = {}
+    doc_map = {}
+    
+    # Dense scores (weighted by alpha)
+    for rank, doc in enumerate(dense_results):
+        doc_id = doc['metadata'].get('chunk_id', doc['metadata'].get('doc_id'))
+        if not doc_id:
+            continue
+        rrf_score = alpha / (k + rank + 1)
+        scores[doc_id] = scores.get(doc_id, 0) + rrf_score
+        doc_map[doc_id] = doc
+    
+    # Sparse scores (weighted by 1-alpha)
+    for rank, (doc_id, _) in enumerate(sparse_results):
+        rrf_score = (1 - alpha) / (k + rank + 1)
+        scores[doc_id] = scores.get(doc_id, 0) + rrf_score
+        # If doc not in dense results, we skip it (need full doc object)
+    
+    # Sort by combined score
+    sorted_ids = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    
+    if not sorted_ids:
+        return []
+    
+    # CRITICAL FIX: Normalize RRF scores to [0, 1] range
+    # This fixes Bug #1 where RRF scores (~0.01-0.03) were incompatible with
+    # downstream score thresholds that expect [0, 1] range
+    max_score = sorted_ids[0][1]
+    min_score = sorted_ids[-1][1] if len(sorted_ids) > 1 else 0
+    score_range = max_score - min_score if max_score > min_score else 1.0
+    
+    # Build result list with normalized scores
+    results = []
+    for doc_id, rrf_score in sorted_ids:
+        if doc_id in doc_map:
+            doc = doc_map[doc_id].copy()
+            # Normalize to [0, 1] range for compatibility with thresholds
+            normalized_score = (rrf_score - min_score) / score_range if score_range > 0 else rrf_score
+            doc['rrf_score_raw'] = rrf_score  # Keep original for debugging
+            doc['score'] = normalized_score  # Use normalized for downstream
+            results.append(doc)
+    
+    return results
+
+
 class Retriever:
-    """Document retriever with grade/subject filtering and fallback.
+    """Document retriever with dense semantic search and metadata filtering.
 
-    Uses Qdrant vector store for semantic search with
-    optional metadata filtering by grade level and subject.
-
-    Implements fallback strategy when filters return insufficient results.
+    Uses Qdrant vector store with cosine similarity for semantic search.
+    Supports metadata filtering by grade level and subject.
+    Implements 3-level fallback strategy when filters return insufficient results.
+    
+    Fallback Strategy:
+        Level 1: grade + subject filters
+        Level 2: grade only (if <3 results)
+        Level 3: no filters (if still <3 results)
     """
 
     def __init__(self, settings: Settings | None = None) -> None:
@@ -35,7 +108,6 @@ class Retriever:
         """
         self._settings = settings
         self._store = None
-        self._hybrid_retriever = None
 
     @property
     def settings(self):
@@ -81,6 +153,7 @@ class Retriever:
     async def retrieve(
         self,
         query: str,
+        hyde_query: str | None = None,
         top_k: int = 15,
         grade: str | None = None,
         subject: str | None = None,
@@ -89,6 +162,7 @@ class Retriever:
 
         Args:
             query: User's question
+            hyde_query: HyDE-transformed query (if HyDE is enabled)
             top_k: Number of documents to retrieve
             grade: Filter by grade level (e.g., "S1", "P6")
             subject: Filter by subject (e.g., "mathematics")
@@ -96,26 +170,85 @@ class Retriever:
         Returns:
             List of documents with content, metadata, and scores
         """
+        # Input validation (can be disabled via settings)
+        if getattr(self.settings, 'rag_enable_input_validation', True):
+            if not query or not query.strip():
+                logger.warning("Empty query provided to retriever")
+                return []
+            
+            if top_k < 1:
+                logger.warning(f"Invalid top_k={top_k}, using default 15")
+                top_k = 15
+            
+            if top_k > 100:
+                logger.warning(f"top_k={top_k} exceeds maximum, capping at 100")
+                top_k = 100
+            
+            # Sanitize query
+            query = query.strip()
+            if hyde_query:
+                hyde_query = hyde_query.strip()
+        
         start_time = time.time()
 
         try:
-            # Use dense_query if provided (HyDE), otherwise use original query
-            search_query_text = dense_query if dense_query else query
+            # Use HyDE query if provided, otherwise use original query
+            search_query_text = hyde_query if hyde_query else query
             
-            # Use QdrantStore directly (Dense Retrieval)
-            # We removed HybridRetriever because BM25 index was not being built/persisted,
-            # making it a broken implementation.
-            # Production Fix: Rely on robust Dense Retrieval for now.
-            docs = await self.store.search(
+            # Determine top_k for retrieval
+            # If hybrid search enabled, retrieve more for better fusion
+            retrieval_top_k = top_k * 2 if getattr(self.settings, 'rag_enable_hybrid_search', False) else top_k
+            
+            # Dense retrieval using Qdrant vector store
+            # Uses cosine similarity on normalized embeddings
+            dense_docs = await self.store.search(
                 query=search_query_text,
-                top_k=top_k,
+                top_k=retrieval_top_k,
                 grade=grade,
                 subject=subject,
             )
+            
+            # Hybrid search if enabled
+            if getattr(self.settings, 'rag_enable_hybrid_search', False):
+                try:
+                    from somaai.modules.knowledge.bm25_index import get_bm25_index
+                    
+                    bm25_index = get_bm25_index(self.settings)
+                    
+                    # Check if index has documents
+                    if bm25_index.size() > 0:
+                        # Sparse retrieval using BM25
+                        sparse_results = bm25_index.search(query, top_k=retrieval_top_k)
+                        
+                        # Fuse results using RRF
+                        docs = reciprocal_rank_fusion(
+                            dense_results=dense_docs,
+                            sparse_results=sparse_results,
+                            k=60,
+                            alpha=self.settings.rag_hybrid_alpha
+                        )[:top_k]
+                        
+                        logger.info(
+                            f"Hybrid search: {len(dense_docs)} dense + "
+                            f"{len(sparse_results)} sparse → {len(docs)} fused"
+                        )
+                    else:
+                        logger.warning("BM25 index is empty, using dense only")
+                        docs = dense_docs[:top_k]
+                        
+                except ImportError:
+                    logger.warning("BM25 not available (rank-bm25 not installed), using dense only")
+                    docs = dense_docs[:top_k]
+                except Exception as e:
+                    logger.warning(f"Hybrid search failed: {e}, falling back to dense only")
+                    docs = dense_docs[:top_k]
+            else:
+                docs = dense_docs[:top_k]
 
             # Log retrieval metrics
             latency_ms = (time.time() - start_time) * 1000
             top_score = docs[0].get("score", 0) if docs else 0
+            mode = "hybrid" if getattr(self.settings, 'rag_enable_hybrid_search', False) else "dense"
 
             logger.info(
                 "retrieval",
@@ -126,20 +259,32 @@ class Retriever:
                     "latency_ms": latency_ms,
                     "grade": grade,
                     "subject": subject,
-                    "mode": "dense",
+                    "mode": mode,
                 },
             )
 
             return docs
 
+        except ConnectionError as e:
+            logger.error(f"Qdrant connection failed: {e}")
+            return []
+        
+        except TimeoutError as e:
+            logger.error(f"Qdrant request timeout: {e}")
+            return []
+        
+        except ValueError as e:
+            logger.error(f"Invalid parameters for retrieval: {e}")
+            return []
+        
         except Exception as e:
-            logger.error(f"Retrieval failed: {e}")
+            logger.error(f"Retrieval failed with unexpected error: {e}", exc_info=True)
             return []
 
     async def retrieve_with_fallback(
         self,
         query: str,
-        dense_query: str | None = None,
+        hyde_query: str | None = None,
         grade: str | None = None,
         subject: str | None = None,
         top_k: int = 15,
@@ -155,6 +300,7 @@ class Retriever:
 
         Args:
             query: User's question
+            hyde_query: HyDE-transformed query (if HyDE is enabled)
             grade: Grade level filter
             subject: Subject filter
             top_k: Number of documents
@@ -164,8 +310,27 @@ class Retriever:
         Returns:
             List of documents with fallback indicator in metadata
         """
+        # Input validation
+        if not query or not query.strip():
+            logger.warning("Empty query in retrieve_with_fallback")
+            return []
+        
+        if min_results < 1:
+            logger.warning(f"Invalid min_results={min_results}, using default 3")
+            min_results = 3
+        
+        if min_score < Decimal("0.0") or min_score > Decimal("1.0"):
+            logger.warning(f"Invalid min_score={min_score}, using default 0.3")
+            min_score = Decimal("0.3")
+        
         # Level 1: Try exact filters
-        docs = await self.retrieve(query, dense_query, top_k, grade, subject)
+        docs = await self.retrieve(
+            query=query,
+            hyde_query=hyde_query,
+            top_k=top_k,
+            grade=grade,
+            subject=subject,
+        )
         docs = self._filter_by_score(docs, min_score)
 
         if len(docs) >= min_results:
@@ -175,7 +340,13 @@ class Retriever:
         # Level 2: Try grade only (remove subject filter)
         if subject:
             logger.info(f"Fallback: removing subject filter for '{query[:50]}...'")
-            docs = await self.retrieve(query, dense_query, top_k, grade, None)
+            docs = await self.retrieve(
+                query=query,
+                hyde_query=hyde_query,
+                top_k=top_k,
+                grade=grade,
+                subject=None,
+            )
             # Relax score slightly for cross-subject search
             docs = self._filter_by_score(docs, min_score * Decimal("0.8"))
 
@@ -187,7 +358,13 @@ class Retriever:
         # Level 3: No filters (last resort)
         if grade:
             logger.info(f"Fallback: removing all filters for '{query[:50]}...'")
-            docs = await self.retrieve(query, dense_query, top_k, None, None)
+            docs = await self.retrieve(
+                query=query,
+                hyde_query=hyde_query,
+                top_k=top_k,
+                grade=None,
+                subject=None,
+            )
             # Lower threshold for fallback
             fallback_threshold = min_score * Decimal("0.5")
             docs = self._filter_by_score(docs, fallback_threshold)
@@ -219,120 +396,118 @@ class Retriever:
         query: str,
         grade: str,
         subject: str,
-        dense_query: str | None = None,
+        hyde_query: str | None = None,
         max_tokens: int = 4000,
         use_fallback: bool = True,
     ) -> tuple[list[dict], str]:
         """Retrieve and format documents for LLM context.
 
+        Retrieves relevant document chunks and formats them with source headers.
+        Uses child chunks directly (which already have section context from semantic chunker).
+
         Args:
             query: User's question
             grade: Grade level filter
             subject: Subject filter
-            dense_query: Optional transformed query (HyDE)
-            max_tokens: Maximum tokens for context
+            hyde_query: HyDE-transformed query (if HyDE is enabled)
+            max_tokens: Maximum tokens for context window
             use_fallback: Whether to use fallback strategy
 
         Returns:
             Tuple of (documents, formatted_context_string)
+            - documents: List of retrieved docs with metadata and scores
+            - formatted_context_string: Formatted text for LLM prompt
         """
+        # Input validation
+        if not query or not query.strip():
+            logger.warning("Empty query in retrieve_for_context")
+            return [], ""
+        
+        if not grade or not subject:
+            logger.warning(f"Missing grade or subject: grade={grade}, subject={subject}")
+            # Continue anyway - fallback will handle it
+        
+        if max_tokens < 100:
+            logger.warning(f"max_tokens={max_tokens} too small, using 1000")
+            max_tokens = 1000
+        
+        if max_tokens > 32000:
+            logger.warning(f"max_tokens={max_tokens} too large, capping at 32000")
+            max_tokens = 32000
+        
+        # Retrieve documents (already ranked by relevance)
         if use_fallback:
             docs = await self.retrieve_with_fallback(
                 query=query,
-                dense_query=dense_query,
+                hyde_query=hyde_query,
                 grade=grade,
                 subject=subject,
             )
         else:
             docs = await self.retrieve(
                 query=query,
-                dense_query=dense_query,
+                hyde_query=hyde_query,
                 top_k=15,
                 grade=grade,
                 subject=subject,
             )
 
+        if not docs:
+            logger.warning(f"No documents retrieved for query: {query[:50]}...")
+            return [], ""
+
         # Format context with source references
         context_parts = []
         total_chars = 0
-        char_limit = max_tokens * 4  # Rough char-to-token ratio
+        char_limit = max_tokens * 4  # Rough char-to-token ratio (1 token ≈ 4 chars)
 
-        # PARENT DOCUMENT RETRIEVAL
-        # Fetch full context parents if available
-        parent_ids = set()
-        final_docs_map = {} # id -> doc
-        
-        # First pass: Identify parents and standalone docs
-        for doc in docs:
-            pid = doc['metadata'].get('parent_id')
-            if pid:
-                parent_ids.add(pid)
-            elif doc.get('id'): # Check if it's already a parent or standalone
-                 final_docs_map[doc['id']] = doc
-            else:
-                # Fallback for docs without ID (unlikely)
-                final_docs_map[f"temp_{hash(doc['content'])}"] = doc
-
-        # Fetch parents
-        if parent_ids:
-            try:
-                parent_docs = await self.store.get_by_ids(list(parent_ids))
-                for p_doc in parent_docs:
-                    final_docs_map[p_doc['id']] = p_doc
-                    
-                logger.debug(f"Retrieved {len(parent_docs)} parent documents for context expansion")
-            except Exception as e:
-                logger.warning(f"Failed to fetch parent documents: {e}")
-                # Fallback: keep original child docs if parent fetch fails
-                pass
-        
-        # If we failed to get any parents, or if we have children without parents fetched
-        # We need to make sure we don't lose the original docs content
-        # Strategy: Use Parent if fetched, else use Child
-        
-        # Re-construct final list ensuring we have content
-        # Note: If multiple children point to same parent, parent is only added once in final_docs_map
-        
-        unique_docs = list(final_docs_map.values())
-        
-        # If unique_docs is empty (e.g. only children and parent fetch failed), fallback to original docs
-        if not unique_docs and docs:
-             unique_docs = docs
-        elif not unique_docs: # No docs at all
-             unique_docs = []
-
-        # Sort by score if available? Parents don't have search scores (default 1.0)
-        # Original docs had scores. We lose ranking here.
-        # But context order matters less for powerful models, usually just relevance.
-        # We could try to map Child Score -> Parent Score (Max aggregation)
-        
-        # Simple heuristic: Keep original order of appearance?
-        # Difficult because 5 children -> 1 Parent.
-        
-        # Just use the fetched unique docs
-        
-        for doc in unique_docs:
-            if 'title' not in doc['metadata']:
-                logger.warning(f"Document chunk {doc.get('id', 'unknown')} missing 'title' metadata.")
+        for i, doc in enumerate(docs):
+            # Extract metadata safely
+            metadata = doc.get('metadata', {})
+            title = metadata.get('title', 'Unknown Source')
+            page_start = metadata.get('page_start', '?')
+            page_end = metadata.get('page_end', page_start)
+            section_title = metadata.get('section_title')
             
-            title = doc['metadata'].get('title', 'Source')
-            page = doc['metadata'].get('page_start', '?')
-            # Use 'section_title' if available for better context
-            section = doc['metadata'].get('section_title')
-            source_header = f"[{title}, Page {page}]"
-            if section:
-                source_header += f" (Section: {section})"
+            # Build source header
+            if page_start == page_end:
+                page_ref = f"Page {page_start}"
+            else:
+                page_ref = f"Pages {page_start}-{page_end}"
+            
+            source_header = f"[{title}, {page_ref}]"
+            if section_title:
+                source_header += f" (Section: {section_title})"
+            
+            # Format chunk with header
+            content = doc.get('content', '').strip()
+            if not content:
+                logger.warning(f"Empty content in doc {i}, skipping")
+                continue
                 
-            chunk = f"{source_header}\n{doc['content']}\n"
+            chunk = f"{source_header}\n{content}\n"
 
+            # Check token limit
             if total_chars + len(chunk) > char_limit:
+                logger.debug(
+                    f"Context limit reached: {total_chars} chars, "
+                    f"stopping at doc {i}/{len(docs)}"
+                )
                 break
 
             context_parts.append(chunk)
             total_chars += len(chunk)
 
-        # Return unique_docs (containing Parents) so generator uses THEM for citations
-        return unique_docs, "\n---\n".join(context_parts)
+        logger.info(
+            f"Context built: {len(context_parts)} chunks, "
+            f"{total_chars} chars (~{total_chars // 4} tokens)"
+        )
+        
+        # Return only the docs that were included in context
+        included_docs = docs[:len(context_parts)]
+        formatted_context = "\n---\n".join(context_parts)
+        
+        return included_docs, formatted_context
 
     async def health_check(self) -> dict:
         """Check retriever health.

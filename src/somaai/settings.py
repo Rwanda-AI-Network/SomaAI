@@ -62,6 +62,15 @@ class Settings(BaseSettings):
     
     # RAG Settings
     rag_enable_hyde: bool = False  # Enable Hypothetical Document Embeddings
+    rag_enable_reranking: bool = False  # Enable cross-encoder reranking (resource intensive)
+    rag_enable_input_validation: bool = True  # Enable input validation (recommended)
+    rag_use_simplified_retrieval: bool = True  # Use simplified parent retrieval (recommended)
+    
+    # Hybrid Search (BM25 + Dense)
+    rag_enable_hybrid_search: bool = False  # Enable hybrid search combining BM25 and dense retrieval
+    rag_hybrid_alpha: float = 0.5  # Weight: 0=sparse only, 0.5=balanced, 1=dense only
+    rag_bm25_k1: float = 1.5  # BM25 term frequency saturation parameter
+    rag_bm25_b: float = 0.75  # BM25 length normalization parameter
     # cache_similarity_threshold: float = 0.92
     # cache_embedding_dim: int = 768
     # cache_namespace: str = "somaai"

@@ -135,3 +135,98 @@ def validate_query(query: str) -> str:
 
     sanitizer = InputSanitizer(block_injections=True)
     return sanitizer.sanitize_query(query)
+
+
+
+def sanitize_filename(filename: str) -> str:
+    """Sanitize filename to prevent path traversal attacks.
+    
+    Args:
+        filename: Original filename
+        
+    Returns:
+        Safe filename
+    """
+    # Remove path components
+    filename = filename.split('/')[-1].split('\\')[-1]
+    
+    # Remove dangerous characters (keep alphanumeric, spaces, dots, dashes, underscores)
+    filename = re.sub(r'[^\w\s\-\.]', '', filename)
+    
+    # Remove leading dots (hidden files)
+    filename = filename.lstrip('.')
+    
+    # Limit length
+    if len(filename) > 255:
+        name, ext = filename.rsplit('.', 1) if '.' in filename else (filename, '')
+        filename = name[:250] + ('.' + ext if ext else '')
+    
+    # Ensure not empty
+    if not filename:
+        filename = 'unnamed_file'
+    
+    return filename
+
+
+def validate_file_content(content: bytes, filename: str) -> None:
+    """Validate file content for security issues.
+    
+    Checks file signatures and detects potentially malicious content.
+    
+    Args:
+        content: File content bytes
+        filename: Filename for extension check
+        
+    Raises:
+        ValueError: If file is invalid or potentially malicious
+    """
+    # Check file size
+    if len(content) == 0:
+        raise ValueError("File is empty")
+    
+    if len(content) > 100 * 1024 * 1024:  # 100MB
+        raise ValueError("File too large (max 100MB)")
+    
+    # Validate file signatures
+    ext = filename.lower().split('.')[-1] if '.' in filename else ''
+    
+    if ext == 'pdf':
+        # PDF should start with %PDF
+        if not content.startswith(b'%PDF'):
+            raise ValueError("Invalid PDF file signature")
+        
+        # Check for suspicious JavaScript (potential security risk)
+        if b'/JavaScript' in content or b'/JS' in content:
+            raise ValueError("PDF contains JavaScript (potential security risk)")
+        
+        # Check for suspicious actions
+        if b'/Launch' in content or b'/SubmitForm' in content:
+            raise ValueError("PDF contains potentially dangerous actions")
+    
+    elif ext == 'docx':
+        # DOCX is a ZIP file (PK signature)
+        if not content.startswith(b'PK\x03\x04'):
+            raise ValueError("Invalid DOCX file signature")
+    
+    elif ext == 'doc':
+        # DOC files start with specific signatures
+        valid_signatures = [
+            b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1',  # OLE2
+            b'\x0d\x44\x4f\x43',  # DOC
+        ]
+        if not any(content.startswith(sig) for sig in valid_signatures):
+            raise ValueError("Invalid DOC file signature")
+    
+    elif ext in ['txt', 'md']:
+        # Text files should be valid UTF-8
+        try:
+            content.decode('utf-8')
+        except UnicodeDecodeError:
+            raise ValueError("Invalid text encoding (must be UTF-8)")
+        
+        # Check for null bytes (binary data in text file)
+        if b'\x00' in content:
+            raise ValueError("Text file contains binary data")
+    
+    else:
+        raise ValueError(f"Unsupported file extension: {ext}")

@@ -49,6 +49,9 @@ dependencies = [
     "langchain-text-splitters>=1.1.0",
     "pdfplumber>=0.11.9",
     "langchain>=1.2.7",
+    "pybreaker>=1.0.0",
+    "tenacity>=8.0.0",
+    "xxhash>=3.0.0",
 ]
 
 [project.optional-dependencies]

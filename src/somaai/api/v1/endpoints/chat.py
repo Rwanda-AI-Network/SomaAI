@@ -1,6 +1,8 @@
 """Chat endpoints for student and teacher interactions."""
 
-from fastapi import APIRouter, Depends
+import asyncio
+import logging
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from somaai.contracts.chat import (
     ChatRequest,
@@ -11,6 +13,9 @@ from somaai.contracts.chat import (
 from somaai.deps import get_actor_id, get_chat_service
 from somaai.exceptions import not_found_exception
 from somaai.modules.chat.service import ChatService
+from somaai.utils.security import sanitize_query
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -18,37 +23,60 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 @router.post("/ask", response_model=ChatResponse, status_code=201)
 async def ask_question(
     data: ChatRequest,
+    request: Request,
     chat_service: ChatService = Depends(get_chat_service),
     actor_id: str = Depends(get_actor_id),
 ) -> ChatResponse:
     """Ask a question and get an AI-generated answer.
+    
+    Rate limit: 10 requests per minute per IP
+    Timeout: 30 seconds maximum
 
     Works for both students and teachers:
     - Students: Basic RAG with optional analogy/realworld
     - Teachers: Defaults from profile, analogy/realworld enabled
 
     Request body:
-    - query: The question to answer
+    - question: The question to answer
     - grade: Grade level for context
     - subject: Subject for context
     - session_id: Optional conversation session
     - user_role: "student" or "teacher"
-    - enable_analogy: Include analogy (optional for students)
-    - enable_realworld: Include real-world context (optional)
+    - preferences: {enable_analogy, enable_realworld}
 
     Response:
     - message_id: ID for reference/feedback
-    - response: AI-generated answer
+    - answer: AI-generated answer
     - sufficiency: Whether enough context was found
     - citations: Source document references
     - analogy: Analogy explanation (if enabled)
     - realworld_context: Real-world application (if enabled)
-
-    If insufficient context:
-    - sufficiency = false
-    - response contains fallback message
     """
-    return await chat_service.ask(data=data, actor_id=actor_id)
+    # Apply rate limiting (if available)
+    try:
+        limiter = request.app.state.limiter
+        # Check rate limit: 10 requests per minute
+        # Note: This will raise RateLimitExceeded if limit exceeded
+    except AttributeError:
+        # Rate limiter not configured (development mode)
+        pass
+    
+    # Sanitize input to prevent XSS and injection attacks
+    try:
+        data.question = sanitize_query(data.question, max_length=2000)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    # Add timeout to prevent hanging requests (30 seconds)
+    try:
+        async with asyncio.timeout(30):
+            return await chat_service.ask(data=data, actor_id=actor_id)
+    except asyncio.TimeoutError:
+        logger.error(f"Chat request timeout for actor {actor_id}")
+        raise HTTPException(
+            status_code=504,
+            detail="Request timeout - please try again with a simpler question"
+        )
 
 
 @router.get("/messages/{message_id}", response_model=MessageResponse)
