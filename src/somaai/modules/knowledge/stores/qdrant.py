@@ -15,6 +15,7 @@ from langchain_qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
 from qdrant_client.models import FieldCondition, Filter, MatchValue
 
+from somaai.modules.knowledge.embeddings import get_embeddings
 from somaai.modules.knowledge.vectorstore import VectorStore
 from somaai.utils.files import compute_file_hash
 from somaai.utils.retry import retry_async
@@ -26,7 +27,6 @@ logger = logging.getLogger(__name__)
 
 # Singleton client for connection pooling
 _QDRANT_CLIENT: QdrantClient | None = None
-_EMBEDDINGS_MODEL: HuggingFaceEmbeddings | OpenAIEmbeddings | None = None
 
 
 def get_qdrant_client(settings: Settings) -> QdrantClient:
@@ -47,35 +47,6 @@ def get_qdrant_client(settings: Settings) -> QdrantClient:
             timeout=30,
         )
     return _QDRANT_CLIENT
-
-
-def get_embeddings_model(
-    settings: Settings,
-) -> HuggingFaceEmbeddings | OpenAIEmbeddings:
-    """Get singleton embeddings model.
-
-    Args:
-        settings: Application settings
-
-    Returns:
-        Shared Embeddings instance
-    """
-    global _EMBEDDINGS_MODEL
-    if _EMBEDDINGS_MODEL is None:
-        if settings.openai_api_key:
-            logger.info("Creating OpenAI embeddings model")
-            _EMBEDDINGS_MODEL = OpenAIEmbeddings(
-                api_key=settings.openai_api_key,
-                model="text-embedding-3-small",
-            )
-        else:
-            logger.info("Creating HuggingFace embeddings model (local)")
-            _EMBEDDINGS_MODEL = HuggingFaceEmbeddings(
-                model_name="all-MiniLM-L6-v2",
-                model_kwargs={"device": "cpu"},
-                encode_kwargs={"normalize_embeddings": True},
-            )
-    return _EMBEDDINGS_MODEL
 
 
 class QdrantStore(VectorStore):
@@ -105,7 +76,7 @@ class QdrantStore(VectorStore):
     @property
     def embeddings(self) -> HuggingFaceEmbeddings | OpenAIEmbeddings:
         """Get singleton embeddings model."""
-        return get_embeddings_model(self.settings)
+        return get_embeddings(self.settings)
 
     @property
     def store(self) -> QdrantVectorStore:
@@ -143,6 +114,10 @@ class QdrantStore(VectorStore):
                 embedding=self.embeddings,
             )
         return self._store
+    
+    def as_retriever(self, search_kwargs: dict | None = None):
+        """Get as LangChain retriever."""
+        return self.store.as_retriever(search_kwargs=search_kwargs or {})
 
     async def add(
         self,
@@ -375,3 +350,43 @@ class QdrantStore(VectorStore):
         """Search by embedding vector."""
         docs = await self.store.asimilarity_search_by_vector(embedding, k=top_k)
         return [{"content": d.page_content, "metadata": d.metadata} for d in docs]
+
+    async def get_by_ids(self, ids: list[str]) -> list[dict]:
+        """Retrieve documents by their IDs.
+        
+        Args:
+            ids: List of chunk IDs
+            
+        Returns:
+            List of documents with content and metadata
+        """
+        if not ids:
+            return []
+            
+        try:
+            points = self.client.retrieve(
+                collection_name=self.settings.qdrant_collection_name,
+                ids=ids,
+                with_payload=True,
+                with_vectors=False
+            )
+            
+            results = []
+            for point in points:
+                if point.payload:
+                    content = point.payload.get("page_content", "")
+                    # LangChain Qdrant stores content in page_content
+                    # But sometimes directly in payload if custom used
+                    if not content and "content" in point.payload:
+                        content = point.payload["content"]
+                        
+                    results.append({
+                        "id": point.id,
+                        "content": content,
+                        "metadata": point.payload.get("metadata", {}),
+                        "score": 1.0  # Explicit retrieval is exact match
+                    })
+            return results
+        except Exception as e:
+            logger.error(f"Failed to retrieve by IDs: {e}")
+            return []

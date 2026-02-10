@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from somaai.modules.rag.prompts import (
     SYSTEM_PROMPT,
+    HYDE_PROMPT,
     format_prompt,
     get_prompt_for_role,
 )
@@ -216,6 +217,25 @@ class LLMGenerator(BaseGenerator):
                 else None
             ),
         }
+
+    async def generate_hypothetical_answer(self, query: str) -> str:
+        """Generate a hypothetical answer for HyDE.
+        
+        Args:
+            query: User question
+            
+        Returns:
+            Hypothetical answer string
+        """
+        # Simple HyDE prompt
+        prompt = HYDE_PROMPT.format(question=query)
+        
+        try:
+            response = await self.llm.generate(prompt)
+            return response.strip()
+        except Exception as e:
+            logger.warning(f"HyDE generation failed: {e}")
+            return query  # Fallback to original query
 
     def _extract_section(self, text: str, section_name: str) -> str | None:
         """Extract a section from the response."""

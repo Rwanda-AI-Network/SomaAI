@@ -179,6 +179,8 @@ DATABASE_URL=postgresql+asyncpg://user:pass@ep-xxx.neon.tech/somaai
 
 - [API Documentation](docs/api.md) or (Swagger UI: http://localhost:8000/docs)
 - [Architecture Overview](docs/architecture.md)
+- [RAG System Details](docs/rag_system.md)
+- [Ingestion Pipeline](docs/ingestion.md)
 - [Contributing Guide](CONTRIBUTING.md)
 
 ## License

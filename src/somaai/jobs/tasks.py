@@ -44,13 +44,13 @@ async def ingest_document_task(
 
     from somaai.db import crud
     from somaai.db.session import async_session_maker
-    from somaai.modules.ingest.pipeline import IngestPipeline
+    from somaai.modules.ingest.orchestrator import IngestionOrchestrator
     from somaai.settings import settings
 
     try:
         await update_job_status(job_id, JobStatus.RUNNING)
 
-        pipeline = IngestPipeline(settings)
+        orchestrator = IngestionOrchestrator(settings)
 
         # Sync-compatible progress callback that schedules async DB updates
         def on_progress(stage: str, pct: int) -> None:
@@ -61,7 +61,7 @@ async def ingest_document_task(
             except RuntimeError:
                 pass  # No running loop, skip progress update
 
-        result = await pipeline.run(
+        result = await orchestrator.run(
             doc_id=doc_id,
             file_path=file_path,
             grade=grade,

@@ -26,9 +26,14 @@ RUN uv venv /app/.venv && \
 # Copy source code
 COPY src/ ./src/
 
-# Install the project itself
+# Install the project itself (same extras, no --all-extras to avoid heavy deps)
 RUN . /app/.venv/bin/activate && \
-    uv sync --frozen --no-dev --all-extras
+    uv sync --frozen --no-dev \
+    --extra cache \
+    --extra vectordb \
+    --extra pdf \
+    --extra rag \
+    --extra tasks
 
 # Production stage (minimal runtime)
 FROM python:3.11-slim AS production
@@ -40,6 +45,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     tesseract-ocr \
     poppler-utils \
+    tesseract-ocr-spa \
+    tesseract-ocr-fra \
+    tesseract-ocr-ara \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
