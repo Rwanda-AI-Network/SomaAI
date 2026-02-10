@@ -11,9 +11,9 @@ curl -X 'POST' \
   'http://localhost:8000/api/v1/ingest' \
   -H 'accept: application/json' \
   -H 'Content-Type: multipart/form-data' \
-  -F 'file=@uploads/Name of the document (ex: Computer Science S6 SB.pdf)' \
+  -F 'file=@uploads/Computer Science S6 SB.pdf' \
   -F 'grade=S6' \
-  -F 'subject=name of the subject as in the db(ex: subjectcomputer_science)'
+  -F 'subject=computer_science'
 
 ## Monitor the jobs
 curl -X 'GET' \

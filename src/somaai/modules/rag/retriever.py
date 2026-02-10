@@ -83,6 +83,7 @@ class Retriever:
     async def retrieve(
         self,
         query: str,
+        dense_query: str | None = None,
         top_k: int = 15,
         grade: str | None = None,
         subject: str | None = None,

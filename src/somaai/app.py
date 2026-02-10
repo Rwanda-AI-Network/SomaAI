@@ -8,7 +8,7 @@ from somaai.api.router import api_router
 from somaai.db.session import close_db, init_db
 from somaai.health import health_router
 from somaai.middleware import setup_middleware
-from somaai.modules.knowledge.stores.qdrant import get_embeddings_model
+from somaai.modules.knowledge.embeddings import get_embeddings
 from somaai.providers.llm import get_llm
 from somaai.settings import settings
 
@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
     await init_db()
 
     # Pre-load embeddings model to avoid first-request latency
-    get_embeddings_model(settings)
+    get_embeddings(settings)
 
     ## We create the LLM instance here to ensure it's ready when needed.
     app.state.llm = get_llm(settings)
