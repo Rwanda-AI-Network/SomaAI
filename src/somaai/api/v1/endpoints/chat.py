@@ -63,7 +63,7 @@ async def ask_question(
     
     # Sanitize input to prevent XSS and injection attacks
     try:
-        data.question = sanitize_query(data.question, max_length=2000)
+        data.question = sanitize_query(data.question)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     
