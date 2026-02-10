@@ -14,11 +14,17 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
 from qdrant_client.models import FieldCondition, Filter, MatchValue
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+    before_sleep_log
+)
 
 from somaai.modules.knowledge.embeddings import get_embeddings
 from somaai.modules.knowledge.vectorstore import VectorStore
 from somaai.utils.files import compute_file_hash
-from somaai.utils.retry import retry_async
 
 if TYPE_CHECKING:
     from somaai.settings import Settings
@@ -171,13 +177,21 @@ class QdrantStore(VectorStore):
         ids = await self._add_with_retry(docs_to_add)
         return ids
 
-    @retry_async(max_attempts=3, base_delay=2.0)
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((ConnectionError, TimeoutError)),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True
+    )
     async def _add_with_retry(self, docs: list) -> list[str]:
         """Add documents with retry on failure.
-
+        
+        Uses tenacity for robust retry logic with exponential backoff.
+        
         Args:
             docs: LangChain documents
-
+            
         Returns:
             Document IDs
         """

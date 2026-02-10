@@ -1,9 +1,0 @@
-4. Recommendations
-URGENT: Fix the blocking call in 
-reranker.py
- by using run_in_executor.
-Optimization: Evaluate if 
-_condense_query
- is necessary for the first turn of conversation. Skip it if history is empty.
-Deployment: Ensure the Docker container has at least 4GB RAM allocated.
-Alternative: Considerations for moving Reranking to a separate microservice or using an API (Cohere/Jina) to reclaim 3GB+ disk/RAM and unblock the app.

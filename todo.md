@@ -21,3 +21,4 @@ curl -X 'GET' \
   -H 'accept: application/json'
 
 or  "docker logs -f somaai-app"
+

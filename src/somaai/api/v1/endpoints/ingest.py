@@ -15,6 +15,7 @@ from somaai.db.session import async_session_maker
 from somaai.jobs.queue import enqueue_job, get_job_status
 from somaai.providers.storage import get_storage
 from somaai.utils.ids import generate_id
+from somaai.utils.security import sanitize_filename, validate_file_content
 
 # Rate limiting setup
 try:
@@ -46,7 +47,12 @@ def validate_file(file: UploadFile) -> None:
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
 
-    ext = Path(file.filename).suffix.lower()
+    # Sanitize filename
+    safe_filename = sanitize_filename(file.filename)
+    if not safe_filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    ext = Path(safe_filename).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
@@ -92,7 +98,7 @@ async def ingest_document(
 
     # 2. Generate IDs
     doc_id = generate_id()
-    filename = file.filename or "document"
+    filename = sanitize_filename(file.filename or "document")
     doc_title = title or Path(filename).stem
 
     # 3. Save file to storage
@@ -110,6 +116,12 @@ async def ingest_document(
                     f"File too large. Maximum size: {MAX_FILE_SIZE // (1024 * 1024)}MB"
                 ),
             )
+
+        # Validate file content and check for malicious content
+        try:
+            validate_file_content(file_content, filename)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
         # Save to storage
         full_path = await storage.save(file_content, storage_path)

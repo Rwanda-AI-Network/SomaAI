@@ -6,11 +6,17 @@ Uses Decimal for precise confidence score handling.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 from decimal import Decimal
 from typing import Any
+
+try:
+    import xxhash
+    USE_XXHASH = True
+except ImportError:
+    import hashlib
+    USE_XXHASH = False
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +51,13 @@ class EmbeddingCache:
         return self._redis
 
     def _make_key(self, query: str) -> str:
-        """Generate cache key from query."""
-        query_hash = hashlib.sha256(query.encode()).hexdigest()[:16]
+        """Generate cache key from query using fast hash."""
+        if USE_XXHASH:
+            # xxhash is 10x faster than SHA-256 for short strings
+            query_hash = xxhash.xxh64(query).hexdigest()[:16]
+        else:
+            # Fallback to SHA-256 if xxhash not available
+            query_hash = hashlib.sha256(query.encode()).hexdigest()[:16]
         return f"rag:emb:{query_hash}"
 
     async def get(self, query: str) -> list[float] | None:
@@ -130,9 +141,14 @@ class ResponseCache:
         return self._redis
 
     def _make_key(self, query: str, grade: str, subject: str) -> str:
-        """Generate cache key from query parameters."""
-        data = f"{query}|{grade}|{subject}".encode()
-        key_hash = hashlib.sha256(data).hexdigest()[:16]
+        """Generate cache key from query parameters using fast hash."""
+        data = f"{query}|{grade}|{subject}"
+        if USE_XXHASH:
+            # xxhash is 10x faster than SHA-256 for short strings
+            key_hash = xxhash.xxh64(data).hexdigest()[:16]
+        else:
+            # Fallback to SHA-256 if xxhash not available
+            key_hash = hashlib.sha256(data.encode()).hexdigest()[:16]
         return f"rag:resp:{key_hash}"
 
     async def get(

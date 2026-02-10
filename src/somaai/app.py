@@ -8,7 +8,7 @@ from somaai.api.router import api_router
 from somaai.db.session import close_db, init_db
 from somaai.health import health_router
 from somaai.middleware import setup_middleware
-from somaai.modules.knowledge.embeddings import get_embeddings
+from somaai.modules.knowledge.embeddings import get_embeddings as get_embeddings_model
 from somaai.providers.llm import get_llm
 from somaai.settings import settings
 
@@ -24,6 +24,13 @@ async def lifespan(app: FastAPI):
 
     ## We create the LLM instance here to ensure it's ready when needed.
     app.state.llm = get_llm(settings)
+
+    # Update feature flag metrics
+    try:
+        from somaai.monitoring import update_feature_flags
+        update_feature_flags(settings)
+    except ImportError:
+        pass  # Monitoring not available
 
     try:
         yield
