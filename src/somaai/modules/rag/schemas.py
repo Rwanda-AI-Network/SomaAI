@@ -49,7 +49,8 @@ class InsufficientContextResponse(BaseModel):
 
     answer: str = Field(
         default=(
-            "I don't have enough information in the curriculum to answer this question."
+            "The available curriculum materials don't seem to cover "
+            "this topic. It might be in a different subject or grade level."
         ),
     )
     is_grounded: bool = Field(default=False)

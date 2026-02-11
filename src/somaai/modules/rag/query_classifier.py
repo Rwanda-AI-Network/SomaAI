@@ -17,16 +17,20 @@ logger = logging.getLogger(__name__)
 
 # ── Chitchat patterns (checked case-insensitively) ──────────────────────
 # Each tuple: (compiled regex, response category)
-# Patterns only match SHORT inputs (≤4 words) to avoid false positives
+# Patterns only match SHORT inputs (≤6 words) to avoid false positives
 # on questions like "Hi, what are scheduling queues?"
 
 _PATTERNS: list[tuple[re.Pattern, str]] = [
-    # Greetings
+    # Greetings (simple or compound like "yoo how are you bro")
     (
         re.compile(
-            r"^(hi|hello|hey|good\s*(morning|afternoon|evening|night)"
-            r"|howdy|yo|sup|what'?s\s*up|hola|salut|bonjour"
-            r"|muraho|amakuru|umezute|bite)\s*[!?.]*$",
+            r"^(hi+|hello|hey+|good\s*(morning|afternoon|evening|night)"
+            r"|howdy|yo+|sup|what'?s\s*up|hola|salut|bonjour"
+            r"|muraho|amakuru|umezute|bite"
+            r"|hii+\s+wassup"
+            r"|how\s+(are|r)\s+(you|u|ya))"
+            r"(\s+(how\s+(are|r)\s+(you|u|ya)))?"
+            r"(\s+(bro+|ma\s*g(ee|ie)?|man|guys?|fam|dude))?s*[!?.]*$",
             re.IGNORECASE,
         ),
         "greeting",
@@ -43,8 +47,9 @@ _PATTERNS: list[tuple[re.Pattern, str]] = [
     # Farewells
     (
         re.compile(
-            r"^(bye|goodbye|see\s*you|later|good\s*night"
-            r"|mwiriwe)\s*[!?.]*$",
+            r"^(bye+|goodbye|see\s*(you|ya)|later|good\s*night"
+            r"|mwiriwe|peace\s*out|take\s*care)"
+            r"(\s+(bro+|man|guys?|fam))?\s*[!?.]*$",
             re.IGNORECASE,
         ),
         "farewell",
@@ -111,10 +116,10 @@ def classify_query(query: str) -> tuple[str, str | None]:
     """
     cleaned = query.strip()
 
-    # Only classify short inputs as chitchat (≤4 words).
+    # Only classify short inputs as chitchat (≤6 words).
     # Longer inputs almost always contain a real question.
     word_count = len(cleaned.split())
-    if word_count > 4:
+    if word_count > 6:
         return "curriculum", None
 
     # Check against patterns
