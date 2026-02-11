@@ -14,12 +14,46 @@ import re
 MIN_CHUNK_LENGTH = 50
 
 
+# def is_garbage_text(text: str) -> bool:
+#     """Check if text appears to be garbage/corrupted.
+
+#     Detects:
+#     - Fragmented text (C h a r)
+#     - Missing spaces (LongStringOfGarbage)
+#     """
+#     if not text:
+#         return True
+
+#     words = text.split()
+#     if not words:
+#         return True
+
+#     avg_len = sum(len(w) for w in words) / len(words)
+
+#     # Heuristics
+#     if avg_len < 1.5:
+#         return True  # Fragmented
+#     if avg_len > 25:
+#         return True  # Missing spaces/Garbage
+
+#     # Check vowel ratio (English is typically ~40%, garbage is often low)
+#     vowels = set("aeiouAEIOU")
+#     vowel_count = sum(1 for c in text if c in vowels)
+#     if len(text) > 0:
+#         vowel_ratio = vowel_count / len(text)
+#         if vowel_ratio < 0.2:
+#             return True
+
+#     return False
+
+
 def is_garbage_text(text: str) -> bool:
     """Check if text appears to be garbage/corrupted.
 
     Detects:
     - Fragmented text (C h a r)
     - Missing spaces (LongStringOfGarbage)
+    - Mixed garbage (partially fused words)
     """
     if not text:
         return True
@@ -35,6 +69,13 @@ def is_garbage_text(text: str) -> bool:
         return True  # Fragmented
     if avg_len > 25:
         return True  # Missing spaces/Garbage
+
+    # Check for mixed garbage: some fused words among normal text
+    # "theremotehostmaintainsthissessionforawhile" = 43 chars
+    # Normal English words rarely exceed 20 characters
+    long_words = [w for w in words if len(w) > 25 and w.isalpha()]
+    if len(words) > 5 and len(long_words) / len(words) > 0.1:
+        return True  # >10% of words are suspiciously long
 
     # Check vowel ratio (English is typically ~40%, garbage is often low)
     vowels = set("aeiouAEIOU")
@@ -118,6 +159,10 @@ def calculate_quality_score(text: str) -> float:
 
     # Boilerplate penalty
     if is_boilerplate(text):
+        score *= 0.1
+
+    # Garbage text penalty
+    if is_garbage_text(text):
         score *= 0.1
 
     # Avg word length penalty (detects "C h a r a c t e r" spacing artifacts)

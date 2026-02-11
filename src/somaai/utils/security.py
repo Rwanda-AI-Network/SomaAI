@@ -191,13 +191,28 @@ def validate_file_content(content: bytes, filename: str) -> None:
     # Validate file signatures
     ext = filename.lower().split('.')[-1] if '.' in filename else ''
     
+    # if ext == 'pdf':
+    #     # PDF should start with %PDF
+    #     if not content.startswith(b'%PDF'):
+    #         raise ValueError("Invalid PDF file signature")
+        
+    #     # Check for suspicious JavaScript (potential security risk)
+    #     if b'/JavaScript' in content or b'/JS' in content:
+    #         raise ValueError("PDF contains JavaScript (potential security risk)")
+        
+    #     # Check for suspicious actions
+    #     if b'/Launch' in content or b'/SubmitForm' in content:
+    #         raise ValueError("PDF contains potentially dangerous actions")
+
     if ext == 'pdf':
         # PDF should start with %PDF
         if not content.startswith(b'%PDF'):
             raise ValueError("Invalid PDF file signature")
         
         # Check for suspicious JavaScript (potential security risk)
-        if b'/JavaScript' in content or b'/JS' in content:
+        # Note: /JS alone is too broad — matches font names, metadata, etc.
+        # Look for actual JavaScript action patterns instead.
+        if b'/JavaScript' in content or b'/JS ' in content or b'/JS\n' in content or b'/JS\r' in content:
             raise ValueError("PDF contains JavaScript (potential security risk)")
         
         # Check for suspicious actions

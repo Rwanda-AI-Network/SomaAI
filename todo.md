@@ -22,3 +22,22 @@ curl -X 'GET' \
 
 or  "docker logs -f somaai-app"
 
+
+
+
+
+Step 2 to go with:::
+
+Query Classification — Add a lightweight classifier before the RAG pipeline to detect greetings/chit-chat and skip retrieval entirely. Right now, even a "hi" triggers the full pipeline (embed → Qdrant search → LLM generation). This wastes latency and API calls. The idea was a simple regex or small model check: "Is this a question about curriculum content?" → Yes: run RAG. No: respond directly.
+
+Retrieval Evaluation Framework — Build a small ground-truth dataset of ~20-30 
+
+(question, expected_page/chunk)
+ pairs from your actual curriculum PDFs, then compute Recall@K and MRR (Mean Reciprocal Rank). This was flagged as the single most impactful missing piece because without it, every retrieval "improvement" is a guess. You can't know if switching embedding models or tuning chunk sizes actually helps.
+
+Metadata Normalization — Fix the grade="S6" vs grade="s6" mismatch that silently kills retrieval. Normalize to lowercase at both ingestion and query time.
+
+SSE Streaming — Add Server-Sent Events for the chat endpoint so students don't stare at a blank screen for 10+ seconds while the pipeline runs.
+
+Groq JSON Mode — Switch from hoping the LLM returns valid JSON to using Groq's response_format={"type": "json_object"} for guaranteed valid JSON, eliminating the fragile fallback parsing.
+

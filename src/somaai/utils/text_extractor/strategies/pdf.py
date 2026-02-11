@@ -273,6 +273,37 @@ class PdfStructuredStrategy(BaseExtractionStrategy):
         
         return sections
     
+    # def _is_heading(self, line: str) -> tuple[bool, int, str]:
+    #     """Detect if line is a heading.
+        
+    #     Args:
+    #         line: Text line
+            
+    #     Returns:
+    #         (is_heading, level, title)
+    #     """
+    #     # Pattern 1: ALL CAPS (likely H1)
+    #     if line.isupper() and len(line) > 3 and len(line) < 100:
+    #         return True, 1, line
+        
+    #     # Pattern 2: Numbered (1., 1.1, 1.1.1)
+    #     numbered_pattern = r'^(\d+(?:\.\d+)*)\.\s+(.+)$'
+    #     match = re.match(numbered_pattern, line)
+    #     if match:
+    #         numbering = match.group(1)
+    #         title = match.group(2)
+    #         level = numbering.count('.') + 1
+    #         return True, min(level, 3), title
+        
+    #     # Pattern 3: Chapter/Section keywords
+    #     chapter_pattern = r'^(Chapter|Section|Part|Unit)\s+(\d+):?\s*(.*)$'
+    #     match = re.match(chapter_pattern, line, re.IGNORECASE)
+    #     if match:
+    #         return True, 1, line
+        
+    #     return False, 0, ""
+
+
     def _is_heading(self, line: str) -> tuple[bool, int, str]:
         """Detect if line is a heading.
         
@@ -282,6 +313,11 @@ class PdfStructuredStrategy(BaseExtractionStrategy):
         Returns:
             (is_heading, level, title)
         """
+        # Guard: reject lines that look like garbage/corrupted text
+        # A real heading should be mostly alphanumeric with spaces
+        if not self._looks_like_readable_text(line):
+            return False, 0, ""
+        
         # Pattern 1: ALL CAPS (likely H1)
         if line.isupper() and len(line) > 3 and len(line) < 100:
             return True, 1, line
@@ -302,3 +338,44 @@ class PdfStructuredStrategy(BaseExtractionStrategy):
             return True, 1, line
         
         return False, 0, ""
+
+    def _looks_like_readable_text(self, text: str) -> bool:
+        """Check if text looks like actual readable content, not garbled output.
+
+        Guards heading detection from matching garbage like 'GSSOR(' or
+        '| | DCE | | DCE | |' as section headers.
+
+        Args:
+            text: Text to check
+
+        Returns:
+            True if text appears to be readable
+        """
+        stripped = text.strip()
+        if not stripped or len(stripped) < 2:
+            return False
+
+        # Must contain at least one letter
+        alpha_count = sum(1 for c in stripped if c.isalpha())
+        if alpha_count == 0:
+            return False
+
+        # Alphanumeric ratio should be reasonable (>60%)
+        # Rejects lines like "| | DCE | | DCE | |" (mostly pipes and spaces)
+        alnum_count = sum(1 for c in stripped if c.isalnum())
+        alnum_ratio = alnum_count / len(stripped)
+        if alnum_ratio < 0.6:
+            return False
+
+        # For short lines (potential headings), check for minimum word count
+        # Rejects single-token garbage like "'GSSOR("
+        # But allows short valid headings like "INTRODUCTION" (1 word is fine if clean)
+        words = stripped.split()
+        if len(words) == 1:
+            word = words[0]
+            # Single word: must be purely alphabetic (no special chars mixed in)
+            # "INTRODUCTION" → ok, "'GSSOR(" → rejected
+            if not word.isalpha():
+                return False
+
+        return True
