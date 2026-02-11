@@ -9,15 +9,16 @@ from __future__ import annotations
 import json
 import logging
 import time
-from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
 from somaai.modules.rag.generator import LLMGenerator
 from somaai.modules.rag.prompts import CONDENSE_QUESTION_PROMPT
+from somaai.modules.rag.query_classifier import classify_query
 from somaai.modules.rag.retriever import Retriever
 from somaai.utils.ids import generate_id
 from somaai.utils.observability import log_rag_request
 from somaai.utils.security import sanitize_query
+from somaai.utils.time import utc_now
 
 if TYPE_CHECKING:
     from somaai.settings import Settings
@@ -128,6 +129,25 @@ class RAGPipeline:
             clean_query = sanitize_query(query)
             debug.log_stage("sanitize", query=clean_query)
 
+            # 1.5. Classify query — skip RAG for greetings/chitchat
+            query_type, direct_response = classify_query(clean_query)
+            if query_type == "chitchat":
+                debug.log_stage("classify", type="chitchat")
+                return {
+                    "message_id": generate_id(),
+                    "answer": direct_response,
+                    "sufficiency": "sufficient",
+                    "is_grounded": True,
+                    "confidence": 1.0,
+                    "citations": [],
+                    "chunks_map": {},
+                    "analogy": None,
+                    "realworld_context": None,
+                    "created_at": utc_now(),
+                    "retrieved_chunks": [],
+                }
+            debug.log_stage("classify", type="curriculum")
+
             # 2. Query condensation (only if history exists)
             search_query = clean_query
             if history and history.strip():
@@ -199,7 +219,7 @@ class RAGPipeline:
                 "chunks_map": chunks_map,
                 "analogy": result.get("analogy"),
                 "realworld_context": result.get("realworld_context"),
-                "created_at": datetime.utcnow(),
+                "created_at": utc_now(),
                 "retrieved_chunks": [],
             }
 
@@ -354,7 +374,7 @@ class RAGPipeline:
             "chunks_map": {},
             "analogy": None,
             "realworld_context": None,
-            "created_at": datetime.utcnow(),
+            "created_at": utc_now(),
         }
 
     def _build_citations(

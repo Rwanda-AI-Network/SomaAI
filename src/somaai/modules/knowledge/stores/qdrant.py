@@ -796,7 +796,21 @@ class QdrantStore(VectorStore):
                 )
             )
 
-        qdrant_filter = Filter(must=must_conditions) if must_conditions else None
+        # Exclude parent chunks from search results.
+        # Parent chunks (is_parent=True) are full-section copies kept for
+        # ID-based lookup. They overlap with their child fragments and
+        # produce duplicate results if included in similarity search.
+        must_not_conditions = [
+            FieldCondition(
+                key=self._meta_key("is_parent"),
+                match=MatchValue(value=True),
+            )
+        ]
+
+        qdrant_filter = Filter(
+            must=must_conditions if must_conditions else None,
+            must_not=must_not_conditions,
+        )
 
         docs = await self.store.asimilarity_search_with_score(
             query,

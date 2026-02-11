@@ -88,6 +88,14 @@ class Retriever:
 
             query = query.strip()
 
+        # Normalize metadata filters to canonical casing.
+        # Grade: UPPERCASE (matches GradeLevel enum: P6, S1, S6)
+        # Subject: lowercase (matches Subject enum: computer_science)
+        if grade:
+            grade = grade.strip().upper()
+        if subject:
+            subject = subject.strip().lower()
+
         start_time = time.time()
 
         try:
@@ -166,6 +174,12 @@ class Retriever:
             logger.warning("Empty query in retrieve_with_fallback")
             return []
 
+        # Normalize metadata filters to canonical casing
+        if grade:
+            grade = grade.strip().upper()
+        if subject:
+            subject = subject.strip().lower()
+
         if min_results < 1:
             logger.warning(
                 "Invalid min_results=%d, using default 3", min_results
@@ -186,6 +200,7 @@ class Retriever:
             subject=subject,  # Passed through but not applied in retrieve()
         )
         docs = self._filter_by_score(docs, min_score)
+        docs = self._deduplicate(docs)
 
         if len(docs) >= min_results:
             logger.debug("Grade filter returned %d docs", len(docs))
@@ -206,6 +221,7 @@ class Retriever:
             # Lower threshold for fallback
             fallback_threshold = min_score * 0.5
             docs = self._filter_by_score(docs, fallback_threshold)
+            docs = self._deduplicate(docs)
 
             for doc in docs:
                 doc.setdefault("metadata", {})["fallback_level"] = 1
@@ -223,6 +239,33 @@ class Retriever:
             Filtered documents
         """
         return [d for d in docs if float(d.get("score", 0)) >= min_score]
+
+    def _deduplicate(self, docs: list[dict]) -> list[dict]:
+        """Remove near-duplicate results.
+
+        Uses the first 200 characters of content as a fingerprint.
+        Keeps the highest-scored version (docs must be pre-sorted by score).
+
+        This catches duplicates from:
+        - Overlapping text splitter fragments
+        - Any parent chunks that slip through filters
+
+        Args:
+            docs: Documents sorted by score (highest first)
+
+        Returns:
+            Deduplicated documents
+        """
+        seen: set[str] = set()
+        unique = []
+        for doc in docs:
+            fingerprint = doc.get("content", "").strip()[:200]
+            if fingerprint in seen:
+                logger.debug("Skipping duplicate chunk: %s...", fingerprint[:60])
+                continue
+            seen.add(fingerprint)
+            unique.append(doc)
+        return unique
 
     async def retrieve_for_context(
         self,

@@ -122,6 +122,7 @@ class LLMGenerator:
         parsed = parse_grounded_response(response)
 
         if parsed:
+            logger.debug("Structured JSON parsed successfully")
             # Validate citations against retrieved docs
             if retrieved_docs:
                 citations_valid, validated_citations = validate_citations(
@@ -164,7 +165,11 @@ class LLMGenerator:
             }
 
         # Fallback: unstructured response
-        logger.warning("Failed to parse structured output, using fallback")
+        logger.warning(
+            "Failed to parse structured output, using fallback. "
+            "Response preview: %s...",
+            response[:100],
+        )
         return self._parse_unstructured(response, include_analogy, include_realworld)
 
     def _parse_unstructured(

@@ -11,13 +11,7 @@ SYSTEM_PROMPT = (
     "(Rwanda Education Board) materials.\n\n"
     "CRITICAL RULES:\n"
     "1. Answer ONLY using the provided curriculum content.\n"
-    '   - EXCEPTION: If the user input is a greeting (e.g., "hi"), '
-    'gratitude (e.g., "thank you"), or closing, respond conversationally '
-    'and naturally. Do NOT say "I don\'t have this information" for '
-    "pleasantries. Do not generate analogies and realworld context for "
-    "these cases.\n"
-    "2. If information is NOT in the provided content (and it's not a "
-    "pleasantry), say:\n"
+    "2. If information is NOT in the provided content, say:\n"
     '   "I don\'t have this information in the curriculum"\n'
     "3. NEVER make up curriculum facts.\n"
     "4. Always cite page numbers for every fact.\n"
@@ -234,8 +228,7 @@ Follow Up Input: {question}
 
 Guidance:
 1. If the input is a follow-up question, rewrite it to be standalone.
-2. If the input is a greeting, gratitude, or closing (e.g. "thanks", "bye", "ok"),
-   return it EXACTLY as is.
+2. If the input is already a standalone question, return it as is.
 
 Respond in this exact JSON format:
 ```json

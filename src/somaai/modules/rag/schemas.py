@@ -1,12 +1,9 @@
 """Structured output schemas for LLM responses.
 
 Provides Pydantic models for parsing and validating LLM outputs.
-Uses Decimal for precise floating-point handling.
 """
 
 from __future__ import annotations
-
-from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
@@ -29,11 +26,11 @@ class GroundedResponse(BaseModel):
     is_grounded: bool = Field(
         ..., description="True if answer is fully based on provided context"
     )
-    confidence: Decimal = Field(
+    confidence: float = Field(
         ...,
-        ge=Decimal("0.0"),
-        le=Decimal("1.0"),
-        description="Confidence score 0-1 (Decimal precision)",
+        ge=0.0,
+        le=1.0,
+        description="Confidence score 0-1",
     )
     citations: list[CitationOutput] = Field(
         default_factory=list, description="Page citations used in the answer"
@@ -56,7 +53,7 @@ class InsufficientContextResponse(BaseModel):
         ),
     )
     is_grounded: bool = Field(default=False)
-    confidence: Decimal = Field(default=Decimal("0.0"))
+    confidence: float = Field(default=0.0)
     missing_info: str = Field(..., description="What information is missing")
 
 
@@ -64,7 +61,7 @@ class InsufficientContextResponse(BaseModel):
 GROUNDED_RESPONSE_SCHEMA = """{
   "answer": "Your answer here",
   "is_grounded": true,
-  "confidence": 0.85,  // Decimal value
+  "confidence": 0.85,
   "citations": [
     {"page_number": 1, "quote": "relevant quote"}
   ],
