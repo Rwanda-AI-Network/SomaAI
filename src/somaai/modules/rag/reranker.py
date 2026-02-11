@@ -1,6 +1,6 @@
 """RAG reranker for relevance scoring.
 
-Uses a Cross-Encoder model to improved retrieval accuracy by re-scoring
+Uses a Cross-Encoder model to improve retrieval accuracy by re-scoring
 candidate documents based on their relevance to the query.
 
 Dependencies:
@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
@@ -82,19 +81,18 @@ class Reranker:
         query: str,
         documents: list[dict],
         top_k: int = 5,
-        min_score: Decimal | None = None,
+        min_score: float | None = None,
     ) -> list[dict]:
         """Rerank documents by relevance to query.
 
         Uses Cross-Encoder for precise relevance scoring.
         Returns top_k documents sorted by score.
-        Uses Decimal for precise score handling.
 
         Args:
             query: User's question
             documents: List of docs with 'content' key
             top_k: Number of top results to return
-            min_score: Optional minimum score threshold (Decimal)
+            min_score: Optional minimum score threshold
 
         Returns:
             Reranked documents sorted by relevance score
@@ -102,18 +100,14 @@ class Reranker:
         if not documents:
             return []
 
-        # If model unavailable, return original order with simulated scores
+        # If model unavailable, return original order with retrieval scores
         if not self.is_available:
             logger.debug("Reranker unavailable - using retrieval order")
             for i, doc in enumerate(documents):
-                # Use retrieval score if available, otherwise simulate
-                # Convert to Decimal for precise handling
                 if "score" in doc:
-                    doc["rerank_score"] = Decimal(str(doc["score"]))
+                    doc["rerank_score"] = float(doc["score"])
                 else:
-                    doc["rerank_score"] = Decimal("1.0") - (
-                        Decimal(str(i)) * Decimal("0.01")
-                    )
+                    doc["rerank_score"] = 1.0 - (i * 0.01)
             return documents[:top_k]
 
         # Create query-document pairs
@@ -154,79 +148,4 @@ class Reranker:
         return sorted_docs[:top_k]
 
 
-# Module-level function for backward compatibility
-async def rerank(query: str, documents: list[dict], top_k: int = 5) -> list[dict]:
-    """Rerank documents based on the query.
-
-    Args:
-        query: Search query
-        documents: Retrieved documents
-        top_k: Number of results to return
-
-    Returns:
-        Reranked documents
-    """
-    reranker = get_reranker()
-    return await reranker.rerank(query, documents, top_k)
-
-
-class StructuredReranker:
-    """Reranker using manual logic for structured relevance scoring (Simulation).
-
-    This does NOT use an LLM or Cross-Encoder.
-    It deterministically assigns scores to simulate a ranked output
-    for testing the structured response handling.
-    
-    WARNING: This reranker overwrites original retrieval scores with
-    high-confidence positional scores (e.g., 0.95, 0.85). 
-    It MUST be preceded by a safety check on the original retrieval scores,
-    otherwise it will mask poor retrieval results.
-    """
-
-    def __init__(self, settings=None):
-        self._settings = settings
-
-    async def rerank(
-        self,
-        query: str,
-        documents: list[dict],
-        top_k: int = 5,
-        min_score: Decimal | None = None,
-    ) -> list[dict]:
-        """Rerank using deterministic manual logic."""
-        if not documents:
-            return []
-
-        reranked_docs = []
-        
-        # Simulate ranking by reversing the input order (just to show change)
-        # or keeping it but assigning high scores.
-        # Let's keep retrieval order but assign high scores to top results.
-        
-        for i, doc in enumerate(documents):
-            # Deterministic score based on index
-            # Index 0 -> 0.95, Index 1 -> 0.85, ...
-            # Ensure it fits in 0.0 - 1.0
-            base_score = Decimal("0.95") - (Decimal(str(i)) * Decimal("0.1"))
-            relevance_score = max(Decimal("0.1"), base_score)
-            
-            doc_copy = doc.copy()
-            doc_copy["rerank_score"] = relevance_score
-            doc_copy["rerank_reasoning"] = (
-                f"Simulated relevance: Document at index {i} "
-                f"assumed relevant by manual utility."
-            )
-            reranked_docs.append(doc_copy)
-
-        # Filter and sort
-        if min_score is not None:
-            reranked_docs = [d for d in reranked_docs if d["rerank_score"] >= min_score]
-            
-        reranked_docs.sort(key=lambda x: x["rerank_score"], reverse=True)
-        
-        logger.info(
-            f"Manual structured rerank complete. "
-            f"Top score: {reranked_docs[0]['rerank_score'] if reranked_docs else 0}"
-        )
-        return reranked_docs[:top_k]
 

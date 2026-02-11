@@ -1,7 +1,7 @@
 """Mock retriever for RAG testing."""
 
-from somaai.modules.rag.mock_data import MOCK_CHUNKS
-from somaai.modules.rag.types import RAGInput, RetrievedChunk
+from somaai.tests.fixtures.mock_data import MOCK_CHUNKS
+from somaai.tests.fixtures.types import RAGInput, RetrievedChunk
 
 
 class MockRetriever:

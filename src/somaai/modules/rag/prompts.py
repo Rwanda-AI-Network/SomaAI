@@ -244,13 +244,4 @@ Respond in this exact JSON format:
 }}
 ```"""
 
-# HyDE prompt (Hypothetical Document Embeddings)
-HYDE_PROMPT = """Please write a short, hypothetical answer to the following question.    
-This answer will be used for semantic search retrieval.    
-Focus on retrieving relevant terminology, concepts, and facts    
-that likely appear in the curriculum documents.
-
-Question: {question}
-
-Hypothetical Answer:"""
 

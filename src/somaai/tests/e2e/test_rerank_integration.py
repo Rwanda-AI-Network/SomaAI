@@ -1,14 +1,15 @@
 import asyncio
-import sys
 import os
+import sys
 
 # Add src to path for standalone execution
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../..")))
 
-from unittest.mock import MagicMock, AsyncMock
+import logging
+from unittest.mock import AsyncMock
+
 from somaai.modules.rag.pipelines import RAGPipeline
 from somaai.settings import settings
-import logging
 
 logging.basicConfig(level=logging.INFO)
 
@@ -28,34 +29,36 @@ async def test_reranker_real_pipeline():
     pipeline = RAGPipeline(settings=settings)
     # Inject mock retriever
     pipeline.retriever = mock_retriever
-    
+
     # Mock generator to avoid LLM call
     pipeline.generator = AsyncMock()
     pipeline.generator.generate.return_value = {
         "answer": "Generated answer",
         "sufficiency": "sufficient"
     }
-    
+
     print("\n--- Running Real RAG Pipeline with Patched Retriever ---")
-    response = await pipeline.run(
+    await pipeline.run(
         query="test query",
         grade="S1",
         subject="science"
     )
-    
+
     # Verify Reranker was called and modified scores
-    # We can inspect the arguments passed to the generator, as it receives the 'retrieved_docs'
-    # which should be the *reranked* docs.
+    # We can inspect the arguments passed to the generator, as it receives the
+    # 'retrieved_docs' which should be the *reranked* docs.
     call_args = pipeline.generator.generate.call_args
     if call_args:
         kwargs = call_args.kwargs
         retrieved_docs = kwargs.get('retrieved_docs', [])
         print(f"\nRetrieved Docs passed to Generator: {len(retrieved_docs)}")
         for doc in retrieved_docs:
-            print(f"Doc ID: {doc.get('metadata', {}).get('doc_id')}, "
-                  f"Rerank Score: {doc.get('rerank_score')}, "
-                  f"Reasoning: {doc.get('rerank_reasoning')}")
-        
+            print(
+                f"Doc ID: {doc.get('metadata', {}).get('doc_id')}, "
+                f"Rerank Score: {doc.get('rerank_score')}, "
+                f"Reasoning: {doc.get('rerank_reasoning')}"
+            )
+
         # Check if scores match simulated logic (0.95 descending)
         first_score = retrieved_docs[0].get('rerank_score')
         if retrieved_docs and str(first_score) == "0.95":

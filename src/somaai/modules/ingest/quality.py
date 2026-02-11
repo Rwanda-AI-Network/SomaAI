@@ -4,14 +4,11 @@ Provides filtering for:
 - Minimum length requirements
 - Boilerplate removal
 - Quality scoring
-
-Uses Decimal for precise quality score calculations.
 """
 
 from __future__ import annotations
 
 import re
-from decimal import Decimal
 
 # Minimum chunk length (characters)
 MIN_CHUNK_LENGTH = 50
@@ -51,7 +48,7 @@ def is_garbage_text(text: str) -> bool:
 
 
 # Maximum whitespace ratio
-MAX_WHITESPACE_RATIO = Decimal("0.5")
+MAX_WHITESPACE_RATIO = 0.5
 
 # Boilerplate patterns to remove
 BOILERPLATE_PATTERNS = [
@@ -86,76 +83,65 @@ def is_boilerplate(text: str) -> bool:
     return False
 
 
-def calculate_quality_score(text: str) -> Decimal:
+def calculate_quality_score(text: str) -> float:
     """Calculate quality score for a chunk (0-1).
 
     Higher score = better quality.
-    Uses Decimal for precise calculations.
 
     Args:
         text: Chunk text
 
     Returns:
-        Quality score between 0 and 1 (Decimal)
+        Quality score between 0.0 and 1.0
     """
     if not text or not text.strip():
-        return Decimal("0.0")
+        return 0.0
 
-    score = Decimal("1.0")
+    score = 1.0
 
     # Length penalty
     length = len(text.strip())
     if length < MIN_CHUNK_LENGTH:
-        score *= Decimal(str(length)) / Decimal(str(MIN_CHUNK_LENGTH))
+        score *= length / MIN_CHUNK_LENGTH
 
     # Whitespace ratio penalty
     whitespace_count = sum(1 for c in text if c.isspace())
-    whitespace_ratio = (
-        Decimal(str(whitespace_count)) / Decimal(str(len(text)))
-        if text
-        else Decimal("1")
-    )
+    whitespace_ratio = whitespace_count / len(text) if text else 1.0
     if whitespace_ratio > MAX_WHITESPACE_RATIO:
-        score *= (Decimal("1") - whitespace_ratio) / (
-            Decimal("1") - MAX_WHITESPACE_RATIO
-        )
+        score *= (1.0 - whitespace_ratio) / (1.0 - MAX_WHITESPACE_RATIO)
 
     # Alphanumeric ratio bonus
     alnum_count = sum(1 for c in text if c.isalnum())
-    alnum_ratio = (
-        Decimal(str(alnum_count)) / Decimal(str(len(text))) if text else Decimal("0")
-    )
-    if alnum_ratio < Decimal("0.3"):
-        score *= alnum_ratio / Decimal("0.3")
+    alnum_ratio = alnum_count / len(text) if text else 0.0
+    if alnum_ratio < 0.3:
+        score *= alnum_ratio / 0.3
 
     # Boilerplate penalty
     if is_boilerplate(text):
-        score *= Decimal("0.1")
+        score *= 0.1
 
     # Avg word length penalty (detects "C h a r a c t e r" spacing artifacts)
     words = text.split()
     if words:
         avg_word_len = sum(len(w) for w in words) / len(words)
         if avg_word_len < 1.5:
-            score *= Decimal("0.1")
+            score *= 0.1
 
-    return max(Decimal("0.0"), min(Decimal("1.0"), score))
+    return max(0.0, min(1.0, score))
 
 
 def filter_chunks(
     chunks: list,
     min_length: int = MIN_CHUNK_LENGTH,
-    min_quality: Decimal = Decimal("0.3"),
+    min_quality: float = 0.3,
     remove_boilerplate: bool = True,
 ) -> list:
     """Filter chunks by quality criteria.
 
-    Uses Decimal for precise quality score comparisons.
-
     Args:
         chunks: List of LangChain Document objects
         min_length: Minimum character length
-        min_quality: Minimum quality score (Decimal 0-1)
+        min_quality: Minimum quality score (0-1)
         remove_boilerplate: Remove boilerplate content
 
     Returns:
@@ -190,7 +176,7 @@ def filter_chunks(
 
         # Add quality score to metadata
         if hasattr(chunk, "metadata"):
-            chunk.metadata["quality_score"] = round(float(quality), 3)
+            chunk.metadata["quality_score"] = round(quality, 3)
 
         filtered.append(chunk)
 
@@ -224,81 +210,4 @@ def clean_chunk_text(text: str) -> str:
 
     return text.strip()
 
-
-def calculate_hallucination_risk(chunk) -> float:
-    """
-    Calculate hallucination risk score for a chunk (0.0=safe, 1.0=high risk).
-    
-    Risk factors:
-    - No structure detected: 0.3
-    - OCR extraction method: 0.2
-    - No section context: 0.2
-    - Short content (<100 chars): 0.2
-    - Low extraction confidence: 0.1
-    
-    Args:
-        chunk: LangChain Document chunk
-        
-    Returns:
-        Risk score between 0.0 and 1.0
-    """
-    risk = 0.0
-    metadata = chunk.metadata
-    
-    # Factor 1: No structure detected
-    if not metadata.get("has_structure", True):
-        risk += 0.3
-    
-    # Factor 2: OCR extraction (lower confidence)
-    if metadata.get("extraction_method") == "ocr":
-        risk += 0.2
-    
-    # Factor 3: No section context
-    if not metadata.get("section_title"):
-        risk += 0.2
-    
-    # Factor 4: Very short content
-    if len(chunk.page_content) < 100:
-        risk += 0.2
-    
-    # Factor 5: Low extraction confidence
-    confidence = metadata.get("extraction_confidence", 1.0)
-    risk += (1.0 - confidence) * 0.1
-    
-    return min(risk, 1.0)
-
-
-def filter_by_hallucination_risk(chunks: list, max_risk: float = 0.6) -> list:
-    """
-    Filter chunks by hallucination risk threshold.
-    
-    Args:
-        chunks: List of LangChain Document chunks
-        max_risk: Maximum acceptable risk score (0.0-1.0)
-        
-    Returns:
-        Filtered list of chunks
-    """
-    filtered = []
-    removed_count = 0
-    
-    for chunk in chunks:
-        risk = calculate_hallucination_risk(chunk)
-        
-        if risk <= max_risk:
-            # Add risk score to metadata for monitoring
-            chunk.metadata["hallucination_risk"] = risk
-            filtered.append(chunk)
-        else:
-            removed_count += 1
-    
-    if removed_count > 0:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning(
-            f"Filtered {removed_count} high-risk chunks "
-            f"(risk > {max_risk})"
-        )
-    
-    return filtered
 

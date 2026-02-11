@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 def setup_middleware(app: FastAPI) -> None:
     """Set up application middleware."""
-    
+
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=".*",
@@ -28,6 +28,10 @@ def setup_middleware(app: FastAPI) -> None:
 
         # Try to use Redis storage for distributed rate limiting
         try:
+            import os
+            if os.getenv("TESTING"):
+                raise ImportError("Skip Redis in tests")
+
             from somaai.settings import settings
 
             # Redis-backed storage for horizontal scaling

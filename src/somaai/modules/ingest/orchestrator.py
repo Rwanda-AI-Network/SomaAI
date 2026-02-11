@@ -104,7 +104,6 @@ class IngestionOrchestrator:
             QualityFilterStage(
                 min_length=50,
                 min_quality=0.3,
-                max_hallucination_risk=0.7
             ),
             MetadataEnrichmentStage(),
             VectorStorageStage(store=store, batch_size=50, max_retries=3),

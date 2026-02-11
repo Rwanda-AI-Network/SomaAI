@@ -1,8 +1,8 @@
 import asyncio
 import os
 import sys
+
 import httpx
-import time
 
 BASE_URL = "http://localhost:8000/api/v1"
 
@@ -27,16 +27,16 @@ async def run_test():
         with open(file_path, "rb") as f:
             files = {"file": ("test_document.txt", f, "text/plain")}
             data = {
-                "grade": "S1", 
-                "subject": "social_studies", 
+                "grade": "S1",
+                "subject": "social_studies",
                 "title": "Rwanda Vision 2050 Test"
             }
             resp = await client.post(f"{BASE_URL}/ingest", files=files, data=data)
-        
+
         if resp.status_code != 200:
             print(f"âŒ Upload failed: {resp.text}")
             sys.exit(1)
-            
+
         print("âœ… Upload successful")
         job_id = resp.json()["job_id"]
         doc_id = resp.json()["doc_id"]
@@ -50,7 +50,7 @@ async def run_test():
             job = resp.json()
             status = job["status"]
             print(f"   Status: {status}")
-            
+
             if status == "completed":
                 print("âœ… Ingestion Complete")
                 break
@@ -58,7 +58,7 @@ async def run_test():
                 print(f"âŒ Ingestion Failed: {job.get('error')}")
                 # We continue anyway to see if chat works (maybe partial success?)
                 break
-            
+
             await asyncio.sleep(2)
 
         # 4. Test Chat
@@ -71,27 +71,35 @@ async def run_test():
             "session_id": "test-session-1"
         }
         # Anonymous header
-        headers = {"X-Actor-Id": "test-user-1"} 
-        
-        resp = await client.post(f"{BASE_URL}/chat/ask", json=chat_payload, headers=headers)
-        
+        headers = {"X-Actor-Id": "test-user-1"}
+
+        resp = await client.post(
+            f"{BASE_URL}/chat/ask", json=chat_payload, headers=headers
+        )
+
         if resp.status_code not in (200, 201):
             print(f"âŒ Chat failed: {resp.text}")
             sys.exit(1)
-            
+
         result = resp.json()
         print("âœ… Chat Response Received")
         print(f"   Answer: {result['answer'][:100]}...")
-        
+
         citations = result.get("citations", [])
         print(f"   Citations Found: {len(citations)}")
         for cit in citations:
-            print(f"   - [{cit.get('doc_title')}] Page {cit.get('page_number')}: {cit.get('quote')}")
+            print(
+                f"   - [{cit.get('doc_title')}] Page {cit.get('page_number')}: "
+                f"{cit.get('quote')}"
+            )
 
         if citations:
             print("\nâœ¨ SUCCESS: Citations were retrieved from the uploaded document!")
         else:
-            print("\nâš ï¸ WARNING: No citations found. Retrieval might have failed or mock fallback was used.")
+            print(
+                "\n⚠️ WARNING: No citations found. Retrieval might have failed or mock "
+                "fallback was used."
+            )
 
 if __name__ == "__main__":
     asyncio.run(run_test())

@@ -1,14 +1,12 @@
 """RAG-specific caching for embeddings and responses.
 
 Integrates with existing cache infrastructure but adds RAG-specific logic.
-Uses Decimal for precise confidence score handling.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from decimal import Decimal
 from typing import Any
 
 try:
@@ -114,14 +112,14 @@ class ResponseCache:
         self,
         redis_client=None,
         ttl: int = 86400,
-        min_confidence: Decimal = Decimal("0.7"),
+        min_confidence: float = 0.7,
     ):
         """Initialize response cache.
 
         Args:
             redis_client: Redis client (will use get_cache_redis if None)
             ttl: Time-to-live in seconds (default: 24 hours)
-            min_confidence: Minimum confidence to cache (Decimal for precision)
+            min_confidence: Minimum confidence to cache
         """
         self.ttl = ttl
         self.min_confidence = min_confidence
@@ -195,14 +193,15 @@ class ResponseCache:
         if not self._enabled:
             return
 
-        # Quality check - use Decimal for precise comparison
-        confidence_raw = response.get("confidence", 0)
-        confidence = Decimal(str(confidence_raw))
+        # Quality check
+        confidence = float(response.get("confidence", 0))
         is_grounded = response.get("is_grounded", True)
 
         if confidence < self.min_confidence or not is_grounded:
             logger.debug(
-                f"Skipping cache: confidence={confidence}, grounded={is_grounded}"
+                "Skipping cache: confidence=%.2f, grounded=%s",
+                confidence,
+                is_grounded,
             )
             return
 
@@ -277,7 +276,7 @@ def get_response_cache() -> ResponseCache:
 
         config = get_cache_config()
         _response_cache = ResponseCache(
-            ttl=config.query_ttl,  # Use query_ttl for responses
-            min_confidence=Decimal("0.7"),
+            ttl=config.query_ttl,
+            min_confidence=0.7,
         )
     return _response_cache

@@ -20,10 +20,15 @@ async def lifespan(app: FastAPI):
     await init_db()
 
     # Pre-load embeddings model to avoid first-request latency
-    get_embeddings(settings)
-
-    ## We create the LLM instance here to ensure it's ready when needed.
-    app.state.llm = get_llm(settings)
+    # Skip during tests — model download hangs test setup
+    import os
+    if not os.getenv("TESTING"):
+        get_embeddings_model(settings)
+        app.state.llm = get_llm(settings)
+    else:
+        # In tests, use MockLLMProvider to avoid external calls
+        from somaai.providers.llm import MockLLMProvider
+        app.state.llm = MockLLMProvider()
 
     # Update feature flag metrics
     try:
