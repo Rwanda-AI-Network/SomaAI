@@ -57,7 +57,7 @@ class Retriever:
     async def retrieve(
         self,
         query: str,
-        top_k: int = 15,
+        top_k: int = 8,
         grade: str | None = None,
         subject: str | None = None,
     ) -> list[dict]:
@@ -79,8 +79,8 @@ class Retriever:
                 return []
 
             if top_k < 1:
-                logger.warning("Invalid top_k=%d, using default 15", top_k)
-                top_k = 15
+                logger.warning("Invalid top_k=%d, using default 8", top_k)
+                top_k = 8
 
             if top_k > 100:
                 logger.warning("top_k=%d exceeds maximum, capping at 100", top_k)
@@ -148,7 +148,7 @@ class Retriever:
         query: str,
         grade: str | None = None,
         subject: str | None = None,
-        top_k: int = 15,
+        top_k: int = 8,
         min_score: float = 0.3,
         min_results: int = 3,
     ) -> list[dict]:
@@ -317,7 +317,7 @@ class Retriever:
         else:
             docs = await self.retrieve(
                 query=query,
-                top_k=15,
+                top_k=8,
                 grade=grade,
                 subject=subject,
             )

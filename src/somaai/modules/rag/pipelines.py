@@ -205,8 +205,12 @@ class RAGPipeline:
                 is_grounded=result.get("is_grounded"),
             )
 
-            # 6. Build citations
-            citations, chunks_map = self._build_citations(docs)
+            # 6. Build citations — cross-reference LLM's cited pages
+            #    with retrieved docs so only actually-used sources appear
+            llm_citations = result.get("citations_validated", [])
+            citations, chunks_map = self._build_citations(
+                docs, llm_citations=llm_citations
+            )
 
             # 7. Build response
             response = {
@@ -378,21 +382,51 @@ class RAGPipeline:
         }
 
     def _build_citations(
-        self, docs: list[dict]
+        self,
+        docs: list[dict],
+        llm_citations: list[dict] | None = None,
     ) -> tuple[list[dict], dict[str, str]]:
         """Build citations matching CitationResponse schema.
 
+        Cross-references the LLM's cited page numbers with retrieved
+        chunks so only actually-used sources appear. Falls back to
+        the top-5 retrieved chunks by relevance score.
+
         Args:
             docs: Retrieved documents with metadata
+            llm_citations: LLM's validated citations list, each with
+                           'page_number' and optionally 'valid' flag
 
         Returns:
-            Tuple of (list of citation dicts, chunks_map for persistence)
+            Tuple of (list of citation dicts, chunks_map)
         """
         from somaai.modules.chat.citations import get_citation_extractor
 
         extractor = get_citation_extractor()
+
+        # If the LLM provided citations, filter docs to only those
+        # whose page numbers were actually cited in the answer.
+        cited_docs = docs
+        if llm_citations:
+            cited_pages = {
+                int(c["page_number"])
+                for c in llm_citations
+                if c.get("valid", True) and c.get("page_number")
+            }
+            if cited_pages:
+                cited_docs = [
+                    d for d in docs
+                    if d.get("metadata", {}).get("page_start")
+                    in cited_pages
+                ]
+                # If cross-referencing found matches, use them.
+                # Otherwise fall back to full doc list (model may
+                # have cited pages that don't match metadata exactly).
+                if not cited_docs:
+                    cited_docs = docs
+
         citations, chunks_map = extractor.extract_citations(
-            docs, top_k=len(docs)
+            cited_docs, top_k=5
         )
 
         return [cit.model_dump() for cit in citations], chunks_map

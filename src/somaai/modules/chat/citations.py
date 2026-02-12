@@ -42,6 +42,7 @@ class CitationExtractor:
         self,
         chunks: list[dict],
         top_k: int = 5,
+        min_score: float = 0.4,
     ) -> tuple[list[CitationResponse], dict[str, str]]:
         """Extract citations from retrieved chunks.
 
@@ -50,6 +51,8 @@ class CitationExtractor:
 
         Args:
             chunks: List of chunk dictionaries from RAG pipeline
+            top_k: Maximum number of citations to return
+            min_score: Minimum relevance score to include
 
         Returns:
             Tuple of:
@@ -76,6 +79,12 @@ class CitationExtractor:
             page = meta.get("page_start", 1)
             chunk_id = meta.get("chunk_id")
 
+            score = float(doc.get("rerank_score", doc.get("score", 0)))
+
+            # Skip low-relevance chunks
+            if score < min_score:
+                continue
+
             # Deduplicate by doc_id + page
             key = f"{doc_id}:{page}"
             if key in seen:
@@ -85,8 +94,6 @@ class CitationExtractor:
             # Track chunk_id for persistence
             if chunk_id:
                 chunks_map[key] = chunk_id
-
-            score = float(doc.get("rerank_score", doc.get("score", 0)))
 
             citations.append(
                 CitationResponse(
