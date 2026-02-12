@@ -10,6 +10,8 @@ help:
 	@echo "  make clean       - Clean up build artifacts"
 	@echo "  make docker      - Run with Docker"
 	@echo "  make docker-stop - Stop Docker containers"
+	@echo "  make seed        - Seed meta data"
+	@echo "  make seed-meta   - Seed meta data"
 
 install:
 	uv sync
@@ -38,3 +40,10 @@ docker:
 
 docker-stop:
 	docker-compose -f docker/docker-compose.yml down
+
+seed-meta:
+	PYTHONPATH=src .venv/bin/python -m scripts.seed_meta
+
+seed:
+	make seed-meta
+

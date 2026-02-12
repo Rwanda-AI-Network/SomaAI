@@ -1,0 +1,51 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info
+dist
+build
+eggs
+parts
+var
+sdist
+develop-eggs
+.installed.cfg
+lib
+lib64
+*.egg
+.venv
+venv
+ENV
+env
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# IDEs
+.idea
+.vscode
+*.swp
+*.swo
+
+# Testing / Quality
+.coverage
+htmlcov
+.pytest_cache
+.mypy_cache
+.tox
+
+# Project specific
+logs
+tmp
+uploads
+somaai.db
+qdrant_storage

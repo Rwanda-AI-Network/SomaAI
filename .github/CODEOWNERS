@@ -1,2 +1,8 @@
-# Code Owners
+# Default owners
 * @Rwanda-AI-Network/maintainers
+
+# High-risk areas
+src/somaai/contracts/ @Rwanda-AI-Network/maintainers
+src/somaai/db/ @Rwanda-AI-Network/maintainers
+src/somaai/settings.py @Rwanda-AI-Network/maintainers
+alembic.ini @Rwanda-AI-Network/maintainers

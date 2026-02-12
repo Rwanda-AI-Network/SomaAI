@@ -1,7 +1,5 @@
-#!/bin/bash
 
 # SomaAI Runner Script
-# Usage: ./run.sh [command]
 #   Commands:
 #     local   - Run the app locally (default)
 #     docker  - Run with Docker Compose

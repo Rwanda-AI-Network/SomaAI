@@ -1,6 +1,5 @@
 """ID generation utilities."""
 
-import hashlib ## sha256
 import uuid
 
 
@@ -11,4 +10,4 @@ def generate_id() -> str:
 
 def generate_short_id() -> str:
     """Generate a short unique ID."""
-    return str(uuid.uuid4())[:8]
+    return str(uuid.uuid4())[:12]

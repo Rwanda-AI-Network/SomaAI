@@ -1,11 +1,11 @@
 """Telemetry events."""
 
-from typing import Any, Dict
+from typing import Any
 
 
 class EventEmitter:
     """Event emitter."""
 
-    def emit(self, event_name: str, data: Dict[str, Any]) -> None:
+    def emit(self, event_name: str, data: dict[str, Any]) -> None:
         """Emit an event."""
         pass

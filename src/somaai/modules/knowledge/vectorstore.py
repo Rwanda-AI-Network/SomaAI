@@ -1,23 +1,22 @@
-"""Vector store interface."""
+"""Vector store interface. - we are using qdrant"""
 
 from abc import ABC, abstractmethod
-from typing import List
 
 
 class VectorStore(ABC):
     """Abstract vector store interface."""
 
     @abstractmethod
-    async def add(self, texts: List[str], embeddings: List[List[float]]) -> None:
+    async def add(self, texts: list[str], embeddings: list[list[float]]) -> None:
         """Add documents to the store."""
         pass
 
     @abstractmethod
-    async def search(self, embedding: List[float], top_k: int = 5) -> List[dict]:
+    async def search(self, embedding: list[float], top_k: int = 5) -> list[dict]:
         """Search for similar documents."""
         pass
 
     @abstractmethod
-    async def delete(self, ids: List[str]) -> None:
+    async def delete(self, ids: list[str]) -> None:
         """Delete documents from the store."""
         pass

@@ -1,0 +1,53 @@
+name: Implementation Task
+description: A scoped implementation task with specific files and acceptance criteria
+labels: ["implementation", "mvp"]
+body:
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope / Files Allowed
+      description: List all files that can be modified for this task
+      placeholder: |
+        - src/somaai/api/v1/endpoints/example.py
+        - src/somaai/modules/example/service.py
+        - Tests: src/somaai/tests/test_example.py
+    validations:
+      required: true
+  - type: textarea
+    id: endpoints
+    attributes:
+      label: Endpoints
+      description: API endpoints to implement
+      placeholder: |
+        - GET /api/v1/example
+        - POST /api/v1/example
+    validations:
+      required: false
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Behavior
+      description: Expected behavior and implementation details
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: What must be true for this task to be complete
+    validations:
+      required: true
+  - type: textarea
+    id: testing
+    attributes:
+      label: How to Test
+      description: Commands or steps to verify the implementation
+    validations:
+      required: false
+  - type: input
+    id: owner
+    attributes:
+      label: Owner
+      description: Assigned developer
+    validations:
+      required: false
