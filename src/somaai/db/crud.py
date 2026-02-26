@@ -8,7 +8,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from somaai.db.models import Document, Job
+from somaai.db.models import Document, Grade, Job, Subject, Topic
 
 # ====================
 # Job CRUD Operations
@@ -307,3 +307,135 @@ async def get_chunks_by_document(db: AsyncSession, document_id: str) -> list:
         .order_by(Chunk.chunk_index)
     )
     return list(result.scalars().all())
+
+
+# ==========================
+# Meta CRUD Operations
+# ==========================
+
+
+async def get_all_grades(db: AsyncSession) -> list[Grade]:
+    """Get all grades ordered by display_order.
+
+    Returns:
+        List of Grade instances sorted by display_order
+    """
+    result = await db.execute(select(Grade).order_by(Grade.display_order))
+    return list(result.scalars().all())
+
+
+async def get_all_subjects(db: AsyncSession) -> list[Subject]:
+    """Get all subjects ordered by display_order.
+
+    Returns:
+        List of Subject instances sorted by display_order
+    """
+    result = await db.execute(select(Subject).order_by(Subject.display_order))
+    return list(result.scalars().all())
+
+
+async def get_subjects_for_grade(db: AsyncSession, grade: str) -> list[Subject]:
+    """Get subjects that have documents for a specific grade.
+
+    Falls back to all subjects on cold start (no documents ingested yet).
+
+    Args:
+        db: Database session
+        grade: Grade ID (e.g., 'S2')
+
+    Returns:
+        List of Subject instances
+    """
+    from sqlalchemy import distinct
+
+    # Find subjects with at least one document for this grade
+    doc_result = await db.execute(
+        select(distinct(Document.subject)).where(Document.grade == grade.upper())
+    )
+    subject_ids = [row[0] for row in doc_result.all()]
+
+    if not subject_ids:
+        # Cold start: no documents yet, return all subjects
+        return await get_all_subjects(db)
+
+    result = await db.execute(
+        select(Subject)
+        .where(Subject.id.in_(subject_ids))
+        .order_by(Subject.display_order)
+    )
+    return list(result.scalars().all())
+
+
+async def get_topics_by_grade_subject(
+    db: AsyncSession, grade: str, subject: str
+) -> list[Topic]:
+    """Get topics for a grade+subject combination.
+
+    Args:
+        db: Database session
+        grade: Grade ID (e.g., 'S2')
+        subject: Subject ID (e.g., 'biology')
+
+    Returns:
+        List of Topic instances ordered by page_start
+    """
+    result = await db.execute(
+        select(Topic)
+        .where(Topic.grade == grade.upper(), Topic.subject == subject.lower())
+        .order_by(Topic.page_start)
+    )
+    return list(result.scalars().all())
+
+
+async def get_topic_by_id(db: AsyncSession, topic_id: str) -> Topic | None:
+    """Get a single topic by ID.
+
+    Args:
+        db: Database session
+        topic_id: Topic identifier
+
+    Returns:
+        Topic instance if found, None otherwise
+    """
+    result = await db.execute(select(Topic).where(Topic.id == topic_id))
+    return result.scalar_one_or_none()
+
+
+async def get_topics_by_ids(db: AsyncSession, topic_ids: list[str]) -> list[Topic]:
+    """Get multiple topics by IDs.
+
+    Args:
+        db: Database session
+        topic_ids: List of topic IDs
+
+    Returns:
+        List of Topic instances
+    """
+    if not topic_ids:
+        return []
+    result = await db.execute(
+        select(Topic).where(Topic.id.in_(topic_ids)).order_by(Topic.page_start)
+    )
+    return list(result.scalars().all())
+
+
+async def get_document_counts_by_subject(
+    db: AsyncSession, grade: str | None = None
+) -> dict[str, int]:
+    """Get document count per subject, optionally filtered by grade.
+
+    Args:
+        db: Database session
+        grade: Optional grade ID to filter by
+
+    Returns:
+        Dict mapping subject_id -> document count
+    """
+    from sqlalchemy import func as sqlfunc
+
+    query = select(Document.subject, sqlfunc.count(Document.id))
+    if grade:
+        query = query.where(Document.grade == grade.upper())
+    query = query.group_by(Document.subject)
+    result = await db.execute(query)
+    return dict(result.all())

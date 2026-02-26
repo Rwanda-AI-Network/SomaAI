@@ -1,6 +1,57 @@
-"""Meta service for curriculum metadata operations."""
+"""Metadata service with in-process TTL cache.
+
+Serves curriculum metadata (grades, subjects, topics) from PostgreSQL
+with a lightweight cache layer. Data is small (~53 KB max) and rarely
+changes, so in-process caching avoids Redis overhead.
+"""
+
+from __future__ import annotations
+
+import logging
+import time
+from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from somaai.contracts.meta import GradeResponse, SubjectResponse, TopicResponse
+from somaai.db import crud
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# In-process TTL cache
+# ---------------------------------------------------------------------------
+# Metadata changes only via seed script or admin operations.
+# 5-minute TTL is safe: worst case a new seed takes 5 min to surface.
+_cache: dict[str, tuple[float, Any]] = {}
+CACHE_TTL = 300  # seconds
+
+
+def _get_cached(key: str) -> Any | None:
+    """Return cached value if not expired, else None."""
+    entry = _cache.get(key)
+    if entry is not None:
+        expires, value = entry
+        if time.monotonic() < expires:
+            return value
+        del _cache[key]
+    return None
+
+
+def _set_cached(key: str, value: Any) -> None:
+    """Store value with TTL."""
+    _cache[key] = (time.monotonic() + CACHE_TTL, value)
+
+
+def invalidate_meta_cache() -> None:
+    """Clear all cached metadata. Call after seeding or admin changes."""
+    _cache.clear()
+    logger.info("Meta cache invalidated")
+
+
+# ---------------------------------------------------------------------------
+# Service
+# ---------------------------------------------------------------------------
 
 
 class MetaService:
@@ -8,33 +59,73 @@ class MetaService:
 
     Provides access to grades, subjects, and topics data
     from the Rwanda Education Board curriculum.
+
+    Usage:
+        service = MetaService(db_session)
+        grades = await service.get_grades()
     """
+
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
 
     async def get_grades(self) -> list[GradeResponse]:
         """Get all available grade levels.
 
         Returns:
-            List of grades (P1-P6, S1-S6) with display names
-
-        Order:
-            Returns grades in ascending order (P1, P2, ..., S6)
+            List of grades (P6, S1-S6) sorted by display_order
         """
-        pass
+        cached = _get_cached("grades")
+        if cached is not None:
+            return cached
+
+        grades = await crud.get_all_grades(self.db)
+        result = [
+            GradeResponse(
+                id=g.id,
+                name=g.name,
+                display_order=g.display_order,
+                level=g.level,
+            )
+            for g in grades
+        ]
+        _set_cached("grades", result)
+        logger.debug("Cached %d grades", len(result))
+        return result
 
     async def get_subjects(
         self,
         grade: str | None = None,
     ) -> list[SubjectResponse]:
-        """Get subjects available for a grade.
+        """Get subjects, optionally filtered by grade document availability.
 
         Args:
-            grade: Grade ID to filter by (optional)
+            grade: Grade ID to filter by (e.g., 'S2'). If None, returns all.
 
         Returns:
-            List of subjects available for the grade
-            Returns all subjects if grade is None
+            List of subjects sorted by display_order
         """
-        pass
+        cache_key = f"subjects:{grade or 'all'}"
+        cached = _get_cached(cache_key)
+        if cached is not None:
+            return cached
+
+        if grade:
+            subjects = await crud.get_subjects_for_grade(self.db, grade)
+        else:
+            subjects = await crud.get_all_subjects(self.db)
+
+        result = [
+            SubjectResponse(
+                id=s.id,
+                name=s.name,
+                display_order=s.display_order,
+                icon=s.icon,
+            )
+            for s in subjects
+        ]
+        _set_cached(cache_key, result)
+        logger.debug("Cached %d subjects for %s", len(result), grade or "all")
+        return result
 
     async def get_topics(
         self,
@@ -44,16 +135,35 @@ class MetaService:
         """Get topics for a grade and subject combination.
 
         Args:
-            grade: Grade ID (required)
-            subject: Subject ID (required)
+            grade: Grade ID (required, e.g., 'S2')
+            subject: Subject ID (required, e.g., 'biology')
 
         Returns:
-            List of topics as a tree structure (with children)
-
-        Structure:
-            Topics are hierarchical - main topics contain sub-topics
+            List of topics sorted by page_start
         """
-        pass
+        cache_key = f"topics:{grade}:{subject}"
+        cached = _get_cached(cache_key)
+        if cached is not None:
+            return cached
+
+        topics = await crud.get_topics_by_grade_subject(self.db, grade, subject)
+        result = [
+            TopicResponse(
+                topic_id=t.id,
+                title=t.title,
+                grade=t.grade,
+                subject=t.subject,
+                doc_id=t.doc_id or "",
+                page_start=t.page_start,
+                page_end=t.page_end,
+                path=t.path or [],
+                document_count=1 if t.doc_id else 0,
+            )
+            for t in topics
+        ]
+        _set_cached(cache_key, result)
+        logger.debug("Cached %d topics for %s/%s", len(result), grade, subject)
+        return result
 
     async def get_topic_by_id(self, topic_id: str) -> TopicResponse | None:
         """Get a single topic by ID.
@@ -64,7 +174,20 @@ class MetaService:
         Returns:
             Topic details or None if not found
         """
-        pass
+        topic = await crud.get_topic_by_id(self.db, topic_id)
+        if topic is None:
+            return None
+        return TopicResponse(
+            topic_id=topic.id,
+            title=topic.title,
+            grade=topic.grade,
+            subject=topic.subject,
+            doc_id=topic.doc_id or "",
+            page_start=topic.page_start,
+            page_end=topic.page_end,
+            path=topic.path or [],
+            document_count=1 if topic.doc_id else 0,
+        )
 
     async def get_topics_by_ids(
         self,
@@ -76,6 +199,20 @@ class MetaService:
             topic_ids: List of topic IDs
 
         Returns:
-            List of topics (in same order as input IDs)
+            List of topics (order may differ from input)
         """
-        pass
+        topics = await crud.get_topics_by_ids(self.db, topic_ids)
+        return [
+            TopicResponse(
+                topic_id=t.id,
+                title=t.title,
+                grade=t.grade,
+                subject=t.subject,
+                doc_id=t.doc_id or "",
+                page_start=t.page_start,
+                page_end=t.page_end,
+                path=t.path or [],
+                document_count=1 if t.doc_id else 0,
+            )
+            for t in topics
+        ]
