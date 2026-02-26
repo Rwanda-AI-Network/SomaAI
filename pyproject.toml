@@ -52,6 +52,7 @@ dependencies = [
     "pybreaker>=1.0.0",
     "tenacity>=8.0.0",
     "xxhash>=3.0.0",
+    "sentence-transformers>=3.0.0",
 ]
 
 [project.optional-dependencies]
@@ -90,8 +91,6 @@ rag = [
     "pytesseract>=0.3.10",
     "pdf2image>=1.17.0",
     "docx2txt>=0.8",
-    # Requires PyTorch (~873MB) + CUDA libs (~2.6GB) = ~3.5GB total
-    "sentence-transformers>=3.0.0",
     "rank-bm25>=0.2.2",  # Hybrid search: sparse retrieval
     "pdfplumber>=0.11.0",  # RAG-optimized PDF extraction (tables, layout)
     "groq>=0.4.0",
@@ -102,9 +101,9 @@ tasks = [
 ]
 scale = [
     # Scalability improvements
-    "aioitertools>=0.12.0",      # Async batch processing
-    "prometheus-fastapi-instrumentator>=7.0.0",  # Metrics
-    "slowapi>=0.1.9",            # Rate limiting
+    "aioitertools>=0.12.0",     
+    "prometheus-fastapi-instrumentator>=7.0.0",  
+    "slowapi>=0.1.9",            
 ]
 
 all = [

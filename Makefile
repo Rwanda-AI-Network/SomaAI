@@ -14,10 +14,10 @@ help:
 	@echo "  make seed-meta   - Seed meta data"
 
 install:
-	uv sync
+	UV_HTTP_TIMEOUT=300 uv sync
 
 dev:
-	uv run uvicorn somaai.main:app --reload --host 0.0.0.0 --port 8000
+	UV_HTTP_TIMEOUT=300 uv run uvicorn somaai.main:app --reload --host 0.0.0.0 --port 8000
 
 lint:
 	uv run ruff check src/
