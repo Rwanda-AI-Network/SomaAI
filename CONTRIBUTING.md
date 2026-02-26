@@ -2,7 +2,7 @@
 
 Thank you for your interest in contributing to SomaAI. This document explains branching strategy, pull request process, coding standards, and commit conventions.
 
-For local setup instructions, see [DEVELOPMENT.md](DEVELOPMENT.md).
+For local setup instructions, see [DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ---
 

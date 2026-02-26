@@ -43,11 +43,11 @@ App runs at http://localhost:8000 · Swagger at http://localhost:8000/docs
 
 | Document | Description |
 |----------|-------------|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | System design, module breakdown, data flow, request lifecycles |
-| [INGESTION_PIPELINE.md](INGESTION_PIPELINE.md) | 7-stage ingestion: extract → chunk → embed → store |
-| [RETRIEVAL.md](RETRIEVAL.md) | Dense retrieval, fallback strategy, reranker/BM25 status |
-| [DEVELOPMENT.md](DEVELOPMENT.md) | Local setup, environment variables, debugging, testing |
-| [ROADMAP.md](ROADMAP.md) | MVP status, prioritized improvements |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, module breakdown, data flow, request lifecycles |
+| [INGESTION_PIPELINE.md](docs/INGESTION_PIPELINE.md) | 7-stage ingestion: extract → chunk → embed → store |
+| [RETRIEVAL.md](docs/RETRIEVAL.md) | Dense retrieval, fallback strategy, reranker/BM25 status |
+| [DEVELOPMENT.md](docs/DEVELOPMENT.md) | Local setup, environment variables, debugging, testing |
+| [ROADMAP.md](docs/ROADMAP.md) | MVP status, prioritized improvements |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branch strategy, commit conventions, PR process |
 | [docs/api.md](docs/api.md) | API endpoint reference |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
