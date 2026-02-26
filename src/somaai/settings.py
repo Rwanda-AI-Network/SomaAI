@@ -54,7 +54,6 @@ class Settings(BaseSettings):
     # RAG Settings
     rag_enable_input_validation: bool = True
 
-
     # LLM Backend
     llm_backend: str = "groq"  # groq | openai | huggingface | mock (tests only)
     groq_api_key: str | None = None

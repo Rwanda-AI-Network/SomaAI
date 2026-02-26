@@ -102,9 +102,7 @@ class RAGPipeline:
         # Initialize debugger (no-op when disabled)
         from somaai.utils.debug import PipelineDebugger
 
-        debug = PipelineDebugger(
-            enabled=getattr(self.settings, "debug", False)
-        )
+        debug = PipelineDebugger(enabled=getattr(self.settings, "debug", False))
         debug.start(query, grade, subject)
 
         # Track metrics
@@ -151,9 +149,7 @@ class RAGPipeline:
             # 2. Query condensation (only if history exists)
             search_query = clean_query
             if history and history.strip():
-                search_query = await self._condense_query(
-                    clean_query, history
-                )
+                search_query = await self._condense_query(clean_query, history)
                 debug.log_stage(
                     "condense",
                     original=clean_query,
@@ -177,12 +173,8 @@ class RAGPipeline:
 
             # 4. Check if we have sufficient context
             if not docs:
-                logger.info(
-                    "No documents found. Returning insufficient context."
-                )
-                response = self._insufficient_context_response(
-                    query, grade, subject
-                )
+                logger.info("No documents found. Returning insufficient context.")
+                response = self._insufficient_context_response(query, grade, subject)
                 debug.end(response)
                 return response
 
@@ -234,9 +226,7 @@ class RAGPipeline:
             latency_ms = (time.time() - start_time) * 1000
 
             if monitor_latency:
-                rag_latency_seconds.labels(stage="total").observe(
-                    latency_ms / 1000
-                )
+                rag_latency_seconds.labels(stage="total").observe(latency_ms / 1000)
 
             try:
                 from somaai.monitoring import (
@@ -330,9 +320,7 @@ class RAGPipeline:
 
             cleaned_json = response_json
             if "```json" in cleaned_json:
-                match = re.search(
-                    r"```json\s*(.*?)\s*```", cleaned_json, re.DOTALL
-                )
+                match = re.search(r"```json\s*(.*?)\s*```", cleaned_json, re.DOTALL)
                 if match:
                     cleaned_json = match.group(1)
             elif "```" in cleaned_json:
@@ -343,9 +331,7 @@ class RAGPipeline:
             return rewritten
 
         except Exception as e:
-            logger.warning(
-                "Query rewriting failed: %s. Using original query.", e
-            )
+            logger.warning("Query rewriting failed: %s. Using original query.", e)
             return query
 
     def _insufficient_context_response(
@@ -415,9 +401,9 @@ class RAGPipeline:
             }
             if cited_pages:
                 cited_docs = [
-                    d for d in docs
-                    if d.get("metadata", {}).get("page_start")
-                    in cited_pages
+                    d
+                    for d in docs
+                    if d.get("metadata", {}).get("page_start") in cited_pages
                 ]
                 # If cross-referencing found matches, use them.
                 # Otherwise fall back to full doc list (model may
@@ -425,9 +411,7 @@ class RAGPipeline:
                 if not cited_docs:
                     cited_docs = docs
 
-        citations, chunks_map = extractor.extract_citations(
-            cited_docs, top_k=5
-        )
+        citations, chunks_map = extractor.extract_citations(cited_docs, top_k=5)
 
         return [cit.model_dump() for cit in citations], chunks_map
 
@@ -441,9 +425,7 @@ class RAGPipeline:
 
         return {
             "status": (
-                "healthy"
-                if retriever_health.get("status") == "healthy"
-                else "degraded"
+                "healthy" if retriever_health.get("status") == "healthy" else "degraded"
             ),
             "retriever": retriever_health,
         }

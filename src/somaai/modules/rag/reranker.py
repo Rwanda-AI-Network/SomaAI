@@ -58,6 +58,7 @@ class Reranker:
             self._load_attempted = True
             try:
                 from sentence_transformers import CrossEncoder
+
                 logger.info(f"Loading reranker model: {self.model_name}")
                 self._model = CrossEncoder(self.model_name)
                 logger.info("Reranker model loaded successfully")
@@ -127,9 +128,7 @@ class Reranker:
 
         # Filter by minimum score if specified
         if min_score is not None:
-            documents = [
-                d for d in documents if d.get("rerank_score", 0) >= min_score
-            ]
+            documents = [d for d in documents if d.get("rerank_score", 0) >= min_score]
 
         # Sort by score and return top-k
         sorted_docs = sorted(
@@ -146,6 +145,3 @@ class Reranker:
         )
 
         return sorted_docs[:top_k]
-
-
-

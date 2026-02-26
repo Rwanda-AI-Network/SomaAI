@@ -49,9 +49,7 @@ async def get_document_metadata(
         raise HTTPException(status_code=404, detail="Document not found")
 
     # Count chunks via explicit query (async SQLAlchemy can't lazy-load)
-    result = await db.execute(
-        select(func.count()).where(Chunk.document_id == doc_id)
-    )
+    result = await db.execute(select(func.count()).where(Chunk.document_id == doc_id))
     chunk_count = result.scalar() or 0
 
     return DocumentResponse(
@@ -176,8 +174,8 @@ def _resolve_file_path(storage_path: str, backend: str) -> Path | None:
         return path
 
     base = Path(settings.storage_local_path)
-    
-    # If path already starts with the base directory name (e.g. "uploads/"), 
+
+    # If path already starts with the base directory name (e.g. "uploads/"),
     # strip it to avoid duplication (e.g. "uploads/uploads/...")
     if str(path).startswith(base.name + "/"):
         # Determine strict relative path

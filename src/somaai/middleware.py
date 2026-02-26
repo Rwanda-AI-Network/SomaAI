@@ -29,6 +29,7 @@ def setup_middleware(app: FastAPI) -> None:
         # Try to use Redis storage for distributed rate limiting
         try:
             import os
+
             if os.getenv("TESTING"):
                 raise ImportError("Skip Redis in tests")
 

@@ -5,42 +5,43 @@ Uses industry-standard pybreaker library instead of custom implementation.
 """
 
 import logging
-from pybreaker import CircuitBreaker, CircuitBreakerError
+
+from pybreaker import CircuitBreaker, CircuitBreakerError, CircuitBreakerListener
 
 logger = logging.getLogger(__name__)
 
 
 # Circuit breaker for Qdrant operations
 qdrant_breaker = CircuitBreaker(
-    fail_max=5,              # Open after 5 failures
-    timeout_duration=60,     # Try again after 60 seconds
+    fail_max=5,  # Open after 5 failures
+    reset_timeout=60,  # Try again after 60 seconds
     name="qdrant",
-    expected_exception=Exception,
+    exclude=[Exception],
 )
 
 # Circuit breaker for LLM API calls
 llm_breaker = CircuitBreaker(
-    fail_max=3,              # More sensitive for LLM
-    timeout_duration=30,     # Shorter timeout
+    fail_max=3,  # More sensitive for LLM
+    reset_timeout=30,  # Shorter timeout
     name="llm_api",
-    expected_exception=Exception,
+    exclude=[Exception],
 )
 
 # Circuit breaker for Redis operations
 redis_breaker = CircuitBreaker(
-    fail_max=10,             # More tolerant for cache
-    timeout_duration=15,     # Quick recovery
+    fail_max=10,  # More tolerant for cache
+    reset_timeout=15,  # Quick recovery
     name="redis",
-    expected_exception=Exception,
+    exclude=[Exception],
 )
 
 
 def get_circuit_breaker(service: str) -> CircuitBreaker:
     """Get circuit breaker for a service.
-    
+
     Args:
         service: Service name ('qdrant', 'llm', 'redis')
-        
+
     Returns:
         Configured CircuitBreaker instance
     """
@@ -56,27 +57,27 @@ def get_circuit_breaker(service: str) -> CircuitBreaker:
 CircuitBreakerOpenError = CircuitBreakerError
 
 
-# Add listeners for monitoring
-def _on_breaker_open(breaker, remaining):
-    """Called when circuit breaker opens."""
-    logger.error(
-        f"Circuit breaker '{breaker.name}' OPENED after {breaker.fail_counter} failures. "
-        f"Will retry in {remaining}s"
-    )
+# Listener for monitoring circuit breaker state changes
+class _BreakerMonitor(CircuitBreakerListener):
+    """Listener for circuit breaker state changes."""
+
+    def state_change(self, cb: CircuitBreaker, old_state, new_state) -> None:
+        """Called when circuit breaker state changes."""
+        logger.info(
+            f"Circuit breaker '{cb.name}' changed state: "
+            f"{old_state.name} -> {new_state.name}"
+        )
+
+    def failure(self, cb: CircuitBreaker, exc: Exception) -> None:
+        """Called when a protected call fails."""
+        logger.warning(f"Circuit breaker '{cb.name}' recorded failure: {exc}")
+
+    def success(self, cb: CircuitBreaker) -> None:
+        """Called when a protected call succeeds."""
+        pass  # Too noisy to log every success
 
 
-def _on_breaker_close(breaker):
-    """Called when circuit breaker closes."""
-    logger.info(f"Circuit breaker '{breaker.name}' CLOSED - service recovered")
-
-
-def _on_breaker_half_open(breaker):
-    """Called when circuit breaker enters half-open state."""
-    logger.info(f"Circuit breaker '{breaker.name}' HALF-OPEN - testing recovery")
-
-
-# Register listeners
+# Register listener
+_monitor = _BreakerMonitor()
 for breaker in [qdrant_breaker, llm_breaker, redis_breaker]:
-    breaker.add_listener(_on_breaker_open)
-    breaker.add_listener(_on_breaker_close)
-    breaker.add_listener(_on_breaker_half_open)
+    breaker.add_listener(_monitor)

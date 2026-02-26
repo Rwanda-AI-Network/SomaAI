@@ -89,4 +89,3 @@ class QualityFilterStage(PipelineStage):
                 "filtered": filtered_count,
             },
         )
-

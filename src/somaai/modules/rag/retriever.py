@@ -181,15 +181,11 @@ class Retriever:
             subject = subject.strip().lower()
 
         if min_results < 1:
-            logger.warning(
-                "Invalid min_results=%d, using default 3", min_results
-            )
+            logger.warning("Invalid min_results=%d, using default 3", min_results)
             min_results = 3
 
         if min_score < 0.0 or min_score > 1.0:
-            logger.warning(
-                "Invalid min_score=%.2f, using default 0.3", min_score
-            )
+            logger.warning("Invalid min_score=%.2f, using default 0.3", min_score)
             min_score = 0.3
 
         # Level 1: Try with grade filter
@@ -302,9 +298,7 @@ class Retriever:
             max_tokens = 1000
 
         if max_tokens > 32000:
-            logger.warning(
-                "max_tokens=%d too large, capping at 32000", max_tokens
-            )
+            logger.warning("max_tokens=%d too large, capping at 32000", max_tokens)
             max_tokens = 32000
 
         # Retrieve documents (already ranked by relevance)

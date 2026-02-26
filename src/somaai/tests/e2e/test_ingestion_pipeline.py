@@ -10,7 +10,8 @@ from somaai.modules.ingest.orchestrator import IngestionOrchestrator
 from somaai.settings import Settings
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(levelname)s | %(name)s | %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(name)s | %(message)s")
+
 
 async def test_ingestion_flow():
     print("\n--- Testing Ingestion Orchestrator ---")
@@ -20,9 +21,7 @@ async def test_ingestion_flow():
 
     # Mock QdrantStore to avoid real DB connection
     # Patch where it is defined, not where it is imported locally
-    with patch(
-        "somaai.modules.knowledge.stores.qdrant.QdrantStore"
-    ) as mock_store_cls:
+    with patch("somaai.modules.knowledge.stores.qdrant.QdrantStore") as mock_store_cls:
         mock_store = AsyncMock()
         mock_store.exists_by_doc_id.return_value = False  # Not a duplicate
         mock_store.add.return_value = True  # Successful storage
@@ -44,7 +43,7 @@ async def test_ingestion_flow():
                 subject="geography",
                 title="Vision 2050 Test",
                 on_progress=on_progress,
-                skip_if_exists=False
+                skip_if_exists=False,
             )
 
             print("\n--- Result ---")
@@ -61,7 +60,9 @@ async def test_ingestion_flow():
         except Exception as e:
             print(f"\nFAILURE: Exception during execution: {e}")
             import traceback
+
             traceback.print_exc()
+
 
 if __name__ == "__main__":
     asyncio.run(test_ingestion_flow())

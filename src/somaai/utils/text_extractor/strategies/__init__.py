@@ -1,8 +1,8 @@
-from .base import BaseExtractionStrategy, ExtractionResult, Section, Table, Page
-from .pdf import PdfStructuredStrategy
-from .ocr import OcrStrategy
-from .text import RawTextStrategy
+from .base import BaseExtractionStrategy, ExtractionResult, Page, Section, Table
 from .docx import DocxStructuredStrategy
+from .ocr import OcrStrategy
+from .pdf import PdfStructuredStrategy
+from .text import RawTextStrategy
 
 __all__ = [
     "BaseExtractionStrategy",
@@ -13,5 +13,5 @@ __all__ = [
     "PdfStructuredStrategy",
     "OcrStrategy",
     "RawTextStrategy",
-    "DocxStructuredStrategy"
+    "DocxStructuredStrategy",
 ]

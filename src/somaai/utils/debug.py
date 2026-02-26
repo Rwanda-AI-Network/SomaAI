@@ -80,9 +80,7 @@ class PipelineDebugger:
                     if isinstance(item, dict):
                         preview = str(item.get("content", ""))[:80]
                         score = item.get("score", "?")
-                        logger.info(
-                            "    [%d] score=%s | %s...", i, score, preview
-                        )
+                        logger.info("    [%d] score=%s | %s...", i, score, preview)
                     else:
                         logger.info("    [%d] %s...", i, str(item)[:80])
             elif isinstance(value, str) and len(value) > 100:
@@ -99,9 +97,7 @@ class PipelineDebugger:
         logger.info("=" * 60)
         logger.info("PIPELINE COMPLETE (%dms)", total_ms)
         logger.info("  Sufficiency: %s", response.get("sufficiency"))
-        logger.info(
-            "  Citations: %d", len(response.get("citations", []))
-        )
+        logger.info("  Citations: %d", len(response.get("citations", [])))
         answer_preview = response.get("answer", "")[:120]
         logger.info("  Answer preview: %s...", answer_preview)
         stage_names = " → ".join(s["name"] for s in self.stages)

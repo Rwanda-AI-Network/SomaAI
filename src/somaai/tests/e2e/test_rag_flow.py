@@ -6,6 +6,7 @@ import httpx
 
 BASE_URL = "http://localhost:8000/api/v1"
 
+
 async def run_test():
     async with httpx.AsyncClient(timeout=30.0) as client:
         print("1. Checking API Health...")
@@ -29,7 +30,7 @@ async def run_test():
             data = {
                 "grade": "S1",
                 "subject": "social_studies",
-                "title": "Rwanda Vision 2050 Test"
+                "title": "Rwanda Vision 2050 Test",
             }
             resp = await client.post(f"{BASE_URL}/ingest", files=files, data=data)
 
@@ -68,7 +69,7 @@ async def run_test():
             "grade": "S1",
             "subject": "social_studies",
             "user_role": "student",
-            "session_id": "test-session-1"
+            "session_id": "test-session-1",
         }
         # Anonymous header
         headers = {"X-Actor-Id": "test-user-1"}
@@ -100,6 +101,7 @@ async def run_test():
                 "\n⚠️ WARNING: No citations found. Retrieval might have failed or mock "
                 "fallback was used."
             )
+
 
 if __name__ == "__main__":
     asyncio.run(run_test())

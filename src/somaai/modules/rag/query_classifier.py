@@ -84,8 +84,7 @@ _RESPONSES: dict[str, str] = {
         "anytime. I'm here to help you learn."
     ),
     "farewell": (
-        "Goodbye! 👋 Good luck with your studies. "
-        "Come back anytime you need help!"
+        "Goodbye! 👋 Good luck with your studies. Come back anytime you need help!"
     ),
     "identity": (
         "I'm SomaAI, an AI learning assistant designed for Rwandan "

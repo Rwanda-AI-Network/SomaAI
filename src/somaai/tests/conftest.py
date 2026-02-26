@@ -37,9 +37,7 @@ def client():
     from unittest.mock import AsyncMock, MagicMock, patch
 
     # Patch where it is defined, not where it is imported locally
-    with patch(
-        "somaai.modules.knowledge.stores.qdrant.QdrantStore"
-    ) as mock_store_cls:
+    with patch("somaai.modules.knowledge.stores.qdrant.QdrantStore") as mock_store_cls:
         mock_store = MagicMock()
         mock_store.add.return_value = True  # Successful storage
         mock_store_cls.return_value = mock_store

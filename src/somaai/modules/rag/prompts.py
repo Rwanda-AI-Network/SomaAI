@@ -29,7 +29,7 @@ SYSTEM_PROMPT = (
     "3. NEVER invent curriculum facts.\n"
     "4. Do NOT put page numbers or citation JSON objects inline in "
     "your answer text. No '(page 224)' and no "
-    "'{\"page_number\":224,\"quote\":\"...\"}' in the text. "
+    '\'{"page_number":224,"quote":"..."}\' in the text. '
     "Cite pages ONLY in the 'citations' JSON array. The app "
     "renders citations as clickable source links.\n\n"
     "GRADE ADAPTATION:\n"
@@ -303,5 +303,3 @@ Respond in this exact JSON format:
   "standalone_question": "The rephrased standalone question (or original input)"
 }}
 ```"""
-
-

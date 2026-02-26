@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from somaai.modules.ingest.context import PipelineContext
-from somaai.modules.ingest.stages.base import PipelineStage, StageResult
 from somaai.modules.ingest.exceptions import IngestionError
+from somaai.modules.ingest.stages.base import PipelineStage
 
 if TYPE_CHECKING:
     from somaai.settings import Settings
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 class IngestionOrchestrator:
     """Orchestrates the document ingestion pipeline.
-    
+
     Coordinates stages:
     1. Deduplication - Check if document exists
     2. Extraction - Extract text with structure
@@ -28,13 +28,13 @@ class IngestionOrchestrator:
     5. Enrichment - Add document metadata
     6. Storage - Store in Qdrant
     7. DB Sync - Sync to PostgreSQL
-    
+
     Features:
     - Modular stages (easy to add/remove)
     - Unified progress tracking
     - Error isolation per stage
     - Skip-on-duplicate
-    
+
     Example:
         orchestrator = IngestionOrchestrator(settings)
         result = await orchestrator.run(
@@ -44,58 +44,56 @@ class IngestionOrchestrator:
             subject="biology"
         )
     """
-    
+
     def __init__(self, settings: Settings | None = None):
         """Initialize orchestrator with settings.
-        
+
         Args:
             settings: Application settings (lazy loaded if None)
         """
         self._settings = settings
         self._stages: list[PipelineStage] | None = None
-    
+
     @property
     def settings(self) -> Settings:
         """Get or lazy-load settings."""
         if self._settings is None:
             from somaai.settings import settings
+
             self._settings = settings
         return self._settings
-    
+
     @property
     def stages(self) -> list[PipelineStage]:
         """Get or build pipeline stages."""
         if self._stages is None:
             self._stages = self._build_pipeline()
         return self._stages
-    
+
     def _build_pipeline(self) -> list[PipelineStage]:
         """Build the stage pipeline with dependencies.
-        
+
         Creates all stages with their required dependencies.
         Order matters - stages execute sequentially.
         """
         # Lazy imports to avoid circular dependencies
-        from somaai.modules.knowledge.stores.qdrant import QdrantStore
-        from somaai.modules.ingest.validation import (
-            ExtractionValidator,
-            ChunkValidator
-        )
         from somaai.modules.ingest.semantic_chunker import SemanticChunker
-        
+        from somaai.modules.ingest.stages.chunking import ChunkingStage
+        from somaai.modules.ingest.stages.db_sync import DatabaseSyncStage
+
         # Stage imports
         from somaai.modules.ingest.stages.deduplication import DeduplicationStage
-        from somaai.modules.ingest.stages.extraction import ExtractionStage
-        from somaai.modules.ingest.stages.chunking import ChunkingStage
-        from somaai.modules.ingest.stages.filtering import QualityFilterStage
         from somaai.modules.ingest.stages.enrichment import MetadataEnrichmentStage
+        from somaai.modules.ingest.stages.extraction import ExtractionStage
+        from somaai.modules.ingest.stages.filtering import QualityFilterStage
         from somaai.modules.ingest.stages.storage import VectorStorageStage
-        from somaai.modules.ingest.stages.db_sync import DatabaseSyncStage
-        
+        from somaai.modules.ingest.validation import ChunkValidator, ExtractionValidator
+        from somaai.modules.knowledge.stores.qdrant import QdrantStore
+
         # Shared dependencies
         store = QdrantStore(self.settings)
         chunker = SemanticChunker(max_chunk_size=1500)
-        
+
         # Build ordered pipeline
         return [
             DeduplicationStage(store=store),
@@ -109,7 +107,7 @@ class IngestionOrchestrator:
             VectorStorageStage(store=store, batch_size=50, max_retries=3),
             DatabaseSyncStage(),
         ]
-    
+
     async def run(
         self,
         doc_id: str,
@@ -123,7 +121,7 @@ class IngestionOrchestrator:
         language: str = "eng",
     ) -> dict:
         """Execute the ingestion pipeline.
-        
+
         Args:
             doc_id: Unique document identifier
             file_path: Path to document file
@@ -134,7 +132,7 @@ class IngestionOrchestrator:
             skip_if_exists: Skip if document already ingested
             ocr_mode: OCR mode ('auto', 'force', 'skip')
             language: Language for OCR (default: 'eng')
-            
+
         Returns:
             Dict with status, doc_id, chunks count, pages count
         """
@@ -151,32 +149,32 @@ class IngestionOrchestrator:
             on_progress=on_progress,
             settings=self.settings,
         )
-        
+
         logger.info(f"Starting ingestion pipeline for {doc_id}")
-        
+
         try:
             # Execute stages sequentially
             for stage in self.stages:
                 result = await stage.run(ctx)
-                
+
                 if not result.success:
                     raise IngestionError(
                         f"Stage '{stage.name}' failed: {result.errors}"
                     )
-                
+
                 # Check for skip signal (e.g., duplicate detected)
                 if result.should_skip:
                     logger.info(f"Pipeline skipped at stage '{stage.name}'")
                     return result.data
-            
+
             # Complete
             ctx.report_progress("Complete", 100)
-            
+
             logger.info(
                 f"Ingestion complete: {doc_id}, "
                 f"{len(ctx.chunks)} chunks, {ctx.page_count} pages"
             )
-            
+
             return {
                 "status": "completed",
                 "doc_id": doc_id,
@@ -187,10 +185,10 @@ class IngestionOrchestrator:
                 "file_hash": ctx.file_hash,
                 "stage_results": ctx.stage_results,
             }
-            
+
         except IngestionError:
             raise
-            
+
         except Exception as e:
             logger.error(f"Ingestion failed: {e}")
             ctx.report_progress(f"Failed: {e}", -1)

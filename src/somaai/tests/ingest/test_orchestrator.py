@@ -55,7 +55,7 @@ async def test_ingestion_orchestrator_flow():
                 grade="S1",
                 subject="testing",
                 title="Pytest Document",
-                skip_if_exists=False
+                skip_if_exists=False,
             )
 
             # 3. Assertions

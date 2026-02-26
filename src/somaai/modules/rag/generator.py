@@ -145,8 +145,7 @@ class LLMGenerator:
                 sufficiency = "sufficient"
 
             logger.info(
-                "Structured response: grounded=%s, confidence=%.2f, "
-                "citations_valid=%s",
+                "Structured response: grounded=%s, confidence=%.2f, citations_valid=%s",
                 parsed.is_grounded,
                 confidence,
                 citations_valid,

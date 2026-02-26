@@ -11,9 +11,11 @@ from typing import Any
 
 try:
     import xxhash
+
     USE_XXHASH = True
 except ImportError:
     import hashlib
+
     USE_XXHASH = False
 
 logger = logging.getLogger(__name__)

@@ -41,28 +41,24 @@ class MetadataEnrichmentStage(PipelineStage):
             grade = (ctx.grade or "").strip().upper()
             subject = (ctx.subject or "").strip().lower()
 
-            chunk.metadata.update({
-                # Document identifiers
-                "doc_id": ctx.doc_id,
-                "title": ctx.title,
-                "grade": grade,
-                "subject": subject,
-
-                # Chunk identifiers
-                "chunk_index": i,
-                "chunk_id": chunk.metadata.get("chunk_id") or generate_id(),
-
-                # Page information
-                "page_start": page_num,
-                "page_end": page_num,
-
-                # Note: section_title, section_level, chunk_type
-                # are already set by SemanticChunker
-            })
+            chunk.metadata.update(
+                {
+                    # Document identifiers
+                    "doc_id": ctx.doc_id,
+                    "title": ctx.title,
+                    "grade": grade,
+                    "subject": subject,
+                    # Chunk identifiers
+                    "chunk_index": i,
+                    "chunk_id": chunk.metadata.get("chunk_id") or generate_id(),
+                    # Page information
+                    "page_start": page_num,
+                    "page_end": page_num,
+                    # Note: section_title, section_level, chunk_type
+                    # are already set by SemanticChunker
+                }
+            )
 
         logger.info(f"Enriched {len(ctx.chunks)} chunks with metadata")
 
-        return StageResult(
-            success=True,
-            data={"enriched_count": len(ctx.chunks)}
-        )
+        return StageResult(success=True, data={"enriched_count": len(ctx.chunks)})

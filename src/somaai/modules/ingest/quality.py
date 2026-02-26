@@ -254,5 +254,3 @@ def clean_chunk_text(text: str) -> str:
     text = re.sub(r" {2,}", " ", text)
 
     return text.strip()
-
-

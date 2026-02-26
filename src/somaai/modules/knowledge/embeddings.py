@@ -38,7 +38,7 @@ def get_embeddings(settings: Settings) -> HuggingFaceEmbeddings | OpenAIEmbeddin
             logger.info("Creating HuggingFace embeddings model (local)")
             _EMBEDDINGS_MODEL = HuggingFaceEmbeddings(
                 model_name="all-MiniLM-L6-v2",
-                model_kwargs={'device': 'cpu'},
-                encode_kwargs={'normalize_embeddings': True}
+                model_kwargs={"device": "cpu"},
+                encode_kwargs={"normalize_embeddings": True},
             )
     return _EMBEDDINGS_MODEL

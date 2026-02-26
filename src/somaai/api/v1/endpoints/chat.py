@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from somaai.contracts.chat import (
@@ -28,7 +29,7 @@ async def ask_question(
     actor_id: str = Depends(get_actor_id),
 ) -> ChatResponse:
     """Ask a question and get an AI-generated answer.
-    
+
     Rate limit: 10 requests per minute per IP
     Timeout: 30 seconds maximum
 
@@ -54,19 +55,19 @@ async def ask_question(
     """
     # Apply rate limiting (if available)
     try:
-        limiter = request.app.state.limiter
+        pass
         # Check rate limit: 10 requests per minute
         # Note: This will raise RateLimitExceeded if limit exceeded
     except AttributeError:
         # Rate limiter not configured (development mode)
         pass
-    
+
     # Sanitize input to prevent XSS and injection attacks
     try:
         data.question = sanitize_query(data.question)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
+
     # Add timeout to prevent hanging requests (30 seconds)
     try:
         async with asyncio.timeout(30):
@@ -75,7 +76,7 @@ async def ask_question(
         logger.error(f"Chat request timeout for actor {actor_id}")
         raise HTTPException(
             status_code=504,
-            detail="Request timeout - please try again with a simpler question"
+            detail="Request timeout - please try again with a simpler question",
         )
 
 

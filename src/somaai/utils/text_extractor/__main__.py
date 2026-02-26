@@ -1,27 +1,45 @@
 import argparse
-import sys
 import logging
+import sys
 from pathlib import Path
-from . import extract_text, TextExtractionError
+
+from . import TextExtractionError, extract_text
+
 
 def setup_logging(verbose: bool):
     level = logging.INFO if verbose else logging.WARNING
     logging.basicConfig(
         level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[logging.StreamHandler(sys.stdout)]
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
     )
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Extract text from PDF or Image files.")
-    parser.add_argument("input_file", type=str, help="Path to the input file (PDF/Image)")
-    parser.add_argument("--ocr", action="store_true", help="Force usage of OCR extraction")
-    parser.add_argument("--language", type=str, default="eng", help="Language code for OCR (default: eng)")
-    parser.add_argument("--output", type=str, help="Path to save output text file (optional)")
-    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose logging")
+    parser = argparse.ArgumentParser(
+        description="Extract text from PDF or Image files."
+    )
+    parser.add_argument(
+        "input_file", type=str, help="Path to the input file (PDF/Image)"
+    )
+    parser.add_argument(
+        "--ocr", action="store_true", help="Force usage of OCR extraction"
+    )
+    parser.add_argument(
+        "--language",
+        type=str,
+        default="eng",
+        help="Language code for OCR (default: eng)",
+    )
+    parser.add_argument(
+        "--output", type=str, help="Path to save output text file (optional)"
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable verbose logging"
+    )
 
     args = parser.parse_args()
-    
+
     setup_logging(args.verbose)
     logger = logging.getLogger(__name__)
 
@@ -32,17 +50,17 @@ def main():
 
     try:
         logger.info(f"Extracting text from {input_path}")
-        
-        mode = 'force' if args.ocr else 'auto'
-        
+
+        mode = "force" if args.ocr else "auto"
+
         # We can pass path directly now!
         result = extract_text(
-            input_data=input_path, 
-            filename=input_path.name, 
-            ocr_mode=mode, 
-            language=args.language
+            input_data=input_path,
+            filename=input_path.name,
+            ocr_mode=mode,
+            language=args.language,
         )
-        
+
         if args.output:
             output_path = Path(args.output)
             with open(output_path, "w", encoding="utf-8") as f:
@@ -57,6 +75,7 @@ def main():
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
