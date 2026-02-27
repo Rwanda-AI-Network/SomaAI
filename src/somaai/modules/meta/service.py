@@ -13,7 +13,17 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from somaai.contracts.meta import GradeResponse, SubjectResponse, TopicResponse
+from somaai.contracts.meta import (
+    GradeCreate,
+    GradeResponse,
+    GradeUpdate,
+    SubjectCreate,
+    SubjectResponse,
+    SubjectUpdate,
+    TopicCreate,
+    TopicResponse,
+    TopicUpdate,
+)
 from somaai.db import crud
 
 logger = logging.getLogger(__name__)
@@ -216,3 +226,125 @@ class MetaService:
             )
             for t in topics
         ]
+
+    # ---------------------------------------------------------------------------
+    # Mutations
+    # ---------------------------------------------------------------------------
+
+    async def create_grade(self, grade_in: GradeCreate) -> GradeResponse:
+        """Create a new grade and invalidate cache."""
+        grade = await crud.create_grade(self.db, grade_in.model_dump())
+        invalidate_meta_cache()
+        return GradeResponse(
+            id=grade.id,
+            name=grade.name,
+            display_order=grade.display_order,
+            level=grade.level,
+        )
+
+    async def update_grade(
+        self, grade_id: str, grade_in: GradeUpdate
+    ) -> GradeResponse | None:
+        """Update a grade and invalidate cache."""
+        grade = await crud.update_grade(
+            self.db, grade_id, grade_in.model_dump(exclude_unset=True)
+        )
+        if not grade:
+            return None
+        invalidate_meta_cache()
+        return GradeResponse(
+            id=grade.id,
+            name=grade.name,
+            display_order=grade.display_order,
+            level=grade.level,
+        )
+
+    async def delete_grade(self, grade_id: str) -> bool:
+        """Delete a grade and invalidate cache."""
+        success = await crud.delete_grade(self.db, grade_id)
+        if success:
+            invalidate_meta_cache()
+        return success
+
+    async def create_subject(self, subject_in: SubjectCreate) -> SubjectResponse:
+        """Create a new subject and invalidate cache."""
+        subject = await crud.create_subject(self.db, subject_in.model_dump())
+        invalidate_meta_cache()
+        return SubjectResponse(
+            id=subject.id,
+            name=subject.name,
+            display_order=subject.display_order,
+            icon=subject.icon,
+        )
+
+    async def update_subject(
+        self, subject_id: str, subject_in: SubjectUpdate
+    ) -> SubjectResponse | None:
+        """Update a subject and invalidate cache."""
+        subject = await crud.update_subject(
+            self.db, subject_id, subject_in.model_dump(exclude_unset=True)
+        )
+        if not subject:
+            return None
+        invalidate_meta_cache()
+        return SubjectResponse(
+            id=subject.id,
+            name=subject.name,
+            display_order=subject.display_order,
+            icon=subject.icon,
+        )
+
+    async def delete_subject(self, subject_id: str) -> bool:
+        """Delete a subject and invalidate cache."""
+        success = await crud.delete_subject(self.db, subject_id)
+        if success:
+            invalidate_meta_cache()
+        return success
+
+    async def create_topic(self, topic_in: TopicCreate) -> TopicResponse:
+        """Create a new topic and invalidate cache."""
+        import uuid
+
+        topic_id = str(uuid.uuid4())
+        topic = await crud.create_topic(self.db, topic_id, topic_in.model_dump())
+        invalidate_meta_cache()
+        return TopicResponse(
+            topic_id=topic.id,
+            title=topic.title,
+            grade=topic.grade,
+            subject=topic.subject,
+            doc_id=topic.doc_id or "",
+            page_start=topic.page_start,
+            page_end=topic.page_end,
+            path=topic.path or [],
+            document_count=1 if topic.doc_id else 0,
+        )
+
+    async def update_topic(
+        self, topic_id: str, topic_in: TopicUpdate
+    ) -> TopicResponse | None:
+        """Update a topic and invalidate cache."""
+        topic = await crud.update_topic(
+            self.db, topic_id, topic_in.model_dump(exclude_unset=True)
+        )
+        if not topic:
+            return None
+        invalidate_meta_cache()
+        return TopicResponse(
+            topic_id=topic.id,
+            title=topic.title,
+            grade=topic.grade,
+            subject=topic.subject,
+            doc_id=topic.doc_id or "",
+            page_start=topic.page_start,
+            page_end=topic.page_end,
+            path=topic.path or [],
+            document_count=1 if topic.doc_id else 0,
+        )
+
+    async def delete_topic(self, topic_id: str) -> bool:
+        """Delete a topic and invalidate cache."""
+        success = await crud.delete_topic(self.db, topic_id)
+        if success:
+            invalidate_meta_cache()
+        return success

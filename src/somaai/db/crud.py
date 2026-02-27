@@ -324,6 +324,40 @@ async def get_all_grades(db: AsyncSession) -> list[Grade]:
     return list(result.scalars().all())
 
 
+async def create_grade(db: AsyncSession, grade_data: dict) -> Grade:
+    """Create a new grade."""
+    grade = Grade(**grade_data)
+    db.add(grade)
+    await db.commit()
+    await db.refresh(grade)
+    return grade
+
+
+async def update_grade(
+    db: AsyncSession, grade_id: str, grade_data: dict
+) -> Grade | None:
+    """Update an existing grade."""
+    grade = await db.get(Grade, grade_id)
+    if not grade:
+        return None
+    for key, value in grade_data.items():
+        if value is not None:
+            setattr(grade, key, value)
+    await db.commit()
+    await db.refresh(grade)
+    return grade
+
+
+async def delete_grade(db: AsyncSession, grade_id: str) -> bool:
+    """Delete a grade."""
+    grade = await db.get(Grade, grade_id)
+    if not grade:
+        return False
+    await db.delete(grade)
+    await db.commit()
+    return True
+
+
 async def get_all_subjects(db: AsyncSession) -> list[Subject]:
     """Get all subjects ordered by display_order.
 
@@ -332,6 +366,40 @@ async def get_all_subjects(db: AsyncSession) -> list[Subject]:
     """
     result = await db.execute(select(Subject).order_by(Subject.display_order))
     return list(result.scalars().all())
+
+
+async def create_subject(db: AsyncSession, subject_data: dict) -> Subject:
+    """Create a new subject."""
+    subject = Subject(**subject_data)
+    db.add(subject)
+    await db.commit()
+    await db.refresh(subject)
+    return subject
+
+
+async def update_subject(
+    db: AsyncSession, subject_id: str, subject_data: dict
+) -> Subject | None:
+    """Update an existing subject."""
+    subject = await db.get(Subject, subject_id)
+    if not subject:
+        return None
+    for key, value in subject_data.items():
+        if value is not None:
+            setattr(subject, key, value)
+    await db.commit()
+    await db.refresh(subject)
+    return subject
+
+
+async def delete_subject(db: AsyncSession, subject_id: str) -> bool:
+    """Delete a subject."""
+    subject = await db.get(Subject, subject_id)
+    if not subject:
+        return False
+    await db.delete(subject)
+    await db.commit()
+    return True
 
 
 async def get_subjects_for_grade(db: AsyncSession, grade: str) -> list[Subject]:
@@ -439,3 +507,37 @@ async def get_document_counts_by_subject(
     query = query.group_by(Document.subject)
     result = await db.execute(query)
     return dict(result.all())
+
+
+async def create_topic(db: AsyncSession, topic_id: str, topic_data: dict) -> Topic:
+    """Create a new topic."""
+    topic = Topic(id=topic_id, **topic_data)
+    db.add(topic)
+    await db.commit()
+    await db.refresh(topic)
+    return topic
+
+
+async def update_topic(
+    db: AsyncSession, topic_id: str, topic_data: dict
+) -> Topic | None:
+    """Update an existing topic."""
+    topic = await db.get(Topic, topic_id)
+    if not topic:
+        return None
+    for key, value in topic_data.items():
+        if value is not None:
+            setattr(topic, key, value)
+    await db.commit()
+    await db.refresh(topic)
+    return topic
+
+
+async def delete_topic(db: AsyncSession, topic_id: str) -> bool:
+    """Delete a topic."""
+    topic = await db.get(Topic, topic_id)
+    if not topic:
+        return False
+    await db.delete(topic)
+    await db.commit()
+    return True
