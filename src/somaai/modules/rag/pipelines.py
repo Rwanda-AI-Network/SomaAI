@@ -15,7 +15,7 @@ from somaai.modules.rag.generator import LLMGenerator
 from somaai.modules.rag.prompts import CONDENSE_QUESTION_PROMPT
 from somaai.modules.rag.query_classifier import classify_query
 from somaai.modules.rag.retriever import Retriever
-from somaai.monitoring import log_rag_request, rag_latency_seconds
+from somaai.monitoring import log_rag_request
 from somaai.utils.ids import generate_id
 from somaai.utils.security import sanitize_query
 from somaai.utils.time import utc_now
@@ -104,8 +104,6 @@ class RAGPipeline:
 
         debug = PipelineDebugger(enabled=getattr(self.settings, "debug", False))
         debug.start(query, grade, subject)
-
-
 
         try:
             # 0. Check response cache

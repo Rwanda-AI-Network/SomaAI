@@ -49,10 +49,10 @@ except ImportError:
         def info(self, *args):
             pass
 
-    Counter = _NoOpMetric  # type: ignore[misc,assignment]
-    Histogram = _NoOpMetric  # type: ignore[misc,assignment]
-    Gauge = _NoOpMetric  # type: ignore[misc,assignment]
-    Info = _NoOpMetric  # type: ignore[misc,assignment]
+    Counter = _NoOpMetric
+    Histogram = _NoOpMetric
+    Gauge = _NoOpMetric
+    Info = _NoOpMetric
 
 
 logger = logging.getLogger(__name__)
@@ -274,10 +274,12 @@ def setup_metrics(settings) -> None:
 
     try:
         # App info
-        app_info.info({
-            "version": getattr(settings, "version", "unknown"),
-            "app_name": getattr(settings, "app_name", "somaai"),
-        })
+        app_info.info(
+            {
+                "version": getattr(settings, "version", "unknown"),
+                "app_name": getattr(settings, "app_name", "somaai"),
+            }
+        )
 
         # Feature flags — only report flags that actually exist in Settings
         feature_flags.labels(feature="input_validation").set(
@@ -395,9 +397,7 @@ def record_service_status(service: str, is_up: bool) -> None:
         service_up.labels(service=service).set(1 if is_up else 0)
 
 
-def record_cache_operation(
-    cache_type: str, operation: str, hit: bool
-) -> None:
+def record_cache_operation(cache_type: str, operation: str, hit: bool) -> None:
     """Record a cache get/set with hit/miss status."""
     if _metrics_enabled:
         status = "hit" if hit else "miss"

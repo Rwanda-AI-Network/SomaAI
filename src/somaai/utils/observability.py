@@ -36,7 +36,11 @@ def measure_latency(operation: str, tags: dict | None = None):
             "%s completed in %.2fms",
             operation,
             latency_ms,
-            extra={"operation": operation, "latency_ms": round(latency_ms, 2), **(tags or {})},
+            extra={
+                "operation": operation,
+                "latency_ms": round(latency_ms, 2),
+                **(tags or {}),
+            },
         )
 
 
