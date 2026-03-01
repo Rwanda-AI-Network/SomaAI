@@ -24,6 +24,9 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "sqlite+aiosqlite:///./somaai.db"
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
+    db_pool_timeout: int = 30
 
     # Redis / Cache
     redis_url: str = "redis://localhost:6379/0"  # General
@@ -37,10 +40,25 @@ class Settings(BaseSettings):
     qdrant_collection_name: str = "somaai_documents"
 
     # Storage
-    storage_backend: str = "local"  # local | gdrive
-    storage_local_path: str = "./uploads"
-    gdrive_credentials_path: str | None = None
-    gdrive_folder_id: str | None = None
+    storage_backend: str = "minio"  # minio | s3
+
+    # Ingestion Limits
+    max_ingest_file_size: int = 100 * 1024 * 1024  # 100MB
+    ingest_validation_threshold: int = 10 * 1024 * 1024  # 10MB
+
+    # MinIO (Development)
+    minio_endpoint: str = "localhost:9000"
+    minio_access_key: str = "minioadmin"
+    minio_secret_key: str = "minioadmin"
+    minio_bucket: str = "somaai-documents"
+    minio_secure: bool = False
+
+    # S3 (Production)
+    s3_bucket: str = ""
+    s3_region: str = "us-east-1"
+    s3_access_key: str | None = None
+    s3_secret_key: str | None = None
+    s3_endpoint_url: str | None = None  # Custom endpoint (e.g. MinIO in prod)
 
     # Background Jobs
     queue_backend: str = "redis"  # redis | sync

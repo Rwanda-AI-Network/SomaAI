@@ -20,6 +20,18 @@ from somaai.contracts.common import GradeLevel, JobStatus, Subject
 #     metadata: dict[str, Any] | None = Field(None, description="Additional metadata")
 
 
+class IngestStorageRequest(BaseModel):
+    """Request for POST /api/v1/ingest/storage.
+
+    Allows ingesting a file that is already present in object storage.
+    """
+
+    storage_key: str = Field(..., description="Key of the object in storage")
+    grade: GradeLevel = Field(..., description="Grade level this document covers")
+    subject: Subject = Field(..., description="Subject this document covers")
+    title: str | None = Field(None, description="Optional document title")
+
+
 class IngestJobResponse(BaseModel):
     """Response for POST /api/v1/ingest.
 
@@ -45,6 +57,12 @@ class DocumentResponse(BaseModel):
     subject: Subject = Field(..., description="Subject")
     page_count: int = Field(..., description="Total number of pages")
     chunk_count: int = Field(..., description="Number of indexed chunks")
+    status: str = Field(
+        ..., description="Ingestion status (pending/processing/completed/failed)"
+    )
+    error_message: str | None = Field(
+        None, description="Detailed error message if failed"
+    )
     storage_backend: str = Field(..., description="Storage backend (local/gdrive)")
     uploaded_at: datetime = Field(..., description="Upload timestamp")
     processed_at: datetime | None = Field(

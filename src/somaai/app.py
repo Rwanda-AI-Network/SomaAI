@@ -16,8 +16,19 @@ from somaai.settings import settings
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan."""
+    import logging
+
+    startup_logger = logging.getLogger("somaai.startup")
+
     # Initialize database tables (for development)
     await init_db()
+
+    # Security audit: warn if API key auth is disabled in non-debug mode
+    if not settings.require_api_key and not settings.debug:
+        startup_logger.warning(
+            "⚠️  API key authentication is DISABLED in non-debug mode. "
+            "Set REQUIRE_API_KEY=true for production deployments."
+        )
 
     # Pre-load embeddings model to avoid first-request latency
     # Skip during tests — model download hangs test setup
@@ -49,6 +60,10 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
+    from somaai.logging_conf import setup_logging
+
+    setup_logging()
+
     app = FastAPI(
         title=settings.app_name,
         version=settings.version,

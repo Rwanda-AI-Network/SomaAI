@@ -56,3 +56,25 @@ def setup_middleware(app: FastAPI) -> None:
 
     except ImportError:
         logger.info("slowapi not installed, rate limiting disabled")
+
+    # Architectural Hardening: Request ID for log correlation
+    @app.middleware("http")
+    async def add_request_id(request, call_next):
+        import uuid
+
+        from somaai.utils.logging_ext import set_request_id
+
+        request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+        # Set in request state and global context var
+        request.state.request_id = request_id
+        set_request_id(request_id)
+
+        try:
+            response = await call_next(request)
+            response.headers["X-Request-ID"] = request_id
+            return response
+        finally:
+            # Clean up context strictly
+            set_request_id(None)
+
+    logger.info("Operational hardening: Middleware chain complete")

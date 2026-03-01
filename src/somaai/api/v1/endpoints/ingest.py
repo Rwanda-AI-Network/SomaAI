@@ -1,21 +1,24 @@
-"""Document ingestion endpoints.
-
-Ingest = {upload, chunk, embed, store}
-"""
-
+import logging
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from somaai.contracts.common import GradeLevel, JobStatus, Subject
-from somaai.contracts.docs import DocumentResponse, IngestJobResponse
+from somaai.contracts.common import GradeLevel, Subject
+from somaai.contracts.docs import (
+    IngestJobResponse,
+    IngestStorageRequest,
+)
 from somaai.contracts.jobs import JobResponse
-from somaai.db import crud
-from somaai.db.session import async_session_maker
-from somaai.jobs.queue import enqueue_job, get_job_status
+from somaai.db.session import get_session
+from somaai.jobs.queue import get_job_status
 from somaai.providers.storage import get_storage
+from somaai.services.ingest_service import IngestionService
+from somaai.settings import settings
 from somaai.utils.ids import generate_id
 from somaai.utils.security import sanitize_filename, validate_file_content
+
+logger = logging.getLogger(__name__)
 
 # Rate limiting setup
 try:
@@ -32,7 +35,8 @@ router = APIRouter(prefix="/ingest", tags=["ingest"])
 
 # Allowed file extensions
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".md"}
-MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
+MAX_FILE_SIZE = settings.max_ingest_file_size
+VALIDATION_THRESHOLD = settings.ingest_validation_threshold
 
 
 def validate_file(file: UploadFile) -> None:
@@ -70,151 +74,125 @@ async def ingest_document(
     grade: GradeLevel = Form(..., description="Grade level"),
     subject: Subject = Form(..., description="Subject"),
     title: str = Form(None, description="Document title (optional)"),
+    db: AsyncSession = Depends(get_session),
 ):
     """Upload and ingest a curriculum document.
 
     Accepts file upload with metadata.
     Processing runs as a background job.
-
-    Steps:
-    1. Validate file type
-    2. Save to storage
-    3. Create document record
-    4. Enqueue ingestion job
-
-    Returns:
-    - job_id: Background job ID for tracking
-    - doc_id: Document ID (immediate)
-    - status: "pending"
-
-    Ingestion job will:
-    - Extract text from document
-    - Split into chunks
-    - Generate embeddings
-    - Store in vector database
     """
-    # 1. Validate file
+    # 1. Validate file type
     validate_file(file)
 
-    # 2. Generate IDs
+    # 2. Logic Preparation
     doc_id = generate_id()
     filename = sanitize_filename(file.filename or "document")
     doc_title = title or Path(filename).stem
 
-    # 3. Save file to storage
-    storage = get_storage()
-    storage_path = f"documents/{doc_id}/{filename}"
+    # 3. Check file size early
+    if file.size and file.size > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File too large. Maximum size: {MAX_FILE_SIZE // (1024 * 1024)}MB",
+        )
 
     try:
-        file_content = await file.read()
+        # 4. Content validation for small files
+        if file.size and file.size < VALIDATION_THRESHOLD:
+            content_sample = await file.read()
+            validate_file_content(content_sample, filename)
+            await file.seek(0)
 
-        # Check file size
-        if len(file_content) > MAX_FILE_SIZE:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"File too large. Maximum size: {MAX_FILE_SIZE // (1024 * 1024)}MB"
-                ),
-            )
+        # 5. Save to object storage with SHA-256 deduplication
+        storage = get_storage()
+        object_key, content_hash, was_deduped = await storage.save_deduplicated(
+            file.file,
+            directory="documents",
+            original_filename=filename,
+        )
 
-        # Validate file content and check for malicious content
-        try:
-            validate_file_content(file_content, filename)
-        except ValueError as e:
+        if was_deduped:
+            logger.info(f"Dedup hit for '{filename}' ({content_hash[:12]}…)")
+
+    except (HTTPException, ValueError) as e:
+        if isinstance(e, ValueError):
             raise HTTPException(status_code=400, detail=str(e))
-
-        # Save to storage
-        full_path = await storage.save(file_content, storage_path)
-
-    except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Ingestion failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to save file: {str(e)}",
+            detail=f"Internal server error: {str(e)}",
         )
 
-    # 4. Create document record in database
-    async with async_session_maker() as db:
-        await crud.create_document(
-            db=db,
-            doc_id=doc_id,
-            filename=filename,
-            title=doc_title,
-            storage_path=full_path,
-            grade=grade.value,
-            subject=subject.value,
-        )
-
-    # 5. Enqueue ingestion job
-    job_id = await enqueue_job(
-        task_name="ingest_document",
-        payload={
-            "doc_id": doc_id,
-            "file_path": full_path,
-            "grade": grade.value,
-            "subject": subject.value,
-            "title": doc_title,
-        },
+    # 6. Centralized Handover to Ingestion Pipeline
+    return await IngestionService.trigger_ingestion(
+        db=db,
+        doc_id=doc_id,
+        storage_key=object_key,
+        grade=grade,
+        subject=subject,
+        title=doc_title,
+        filename=filename,
+        content_hash=content_hash,
     )
 
-    return IngestJobResponse(
-        job_id=job_id,
+
+@router.post("/storage", response_model=IngestJobResponse)
+async def ingest_from_storage(
+    request: IngestStorageRequest,
+    db: AsyncSession = Depends(get_session),
+):
+    """Trigger ingestion for a file already present in storage.
+
+    DSA Mentality: O(1) existence validation before enqueuing.
+    Exempted from standard size limits as it bypasses API server buffering.
+    """
+    storage = get_storage()
+
+    # 1. Existence and Metadata Check (High efficiency)
+    metadata = await storage.get_metadata(request.storage_key)
+    if not metadata:
+        raise HTTPException(
+            status_code=404, detail=f"File not found in storage: {request.storage_key}"
+        )
+
+    # 2. Extension Validation
+    ext = Path(request.storage_key).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unsupported file type: {ext}. "
+                f"Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
+            ),
+        )
+
+    # 3. Preparation
+    doc_id = generate_id()
+    doc_title = (
+        request.title or Path(request.storage_key).stem.replace("_", " ").title()
+    )
+
+    # 4. Centralized Handover to Ingestion Pipeline
+    return await IngestionService.trigger_ingestion(
+        db=db,
         doc_id=doc_id,
-        status=JobStatus.PENDING,
-        message=f"Document '{doc_title}' uploaded. Ingestion started.",
+        storage_key=request.storage_key,
+        grade=request.grade,
+        subject=request.subject,
+        title=doc_title,
+        filename=Path(request.storage_key).name,
+        content_hash=None,
     )
 
 
 @router.get("/jobs/{job_id}", response_model=JobResponse)
 async def get_ingest_job_status(job_id: str):
-    """Get ingestion job status.
-
-    Returns:
-    - job_id
-    - status: pending | running | completed | failed
-    - progress_pct: 0-100
-    - result_id: doc_id when completed
-    - error: Error message if failed
-
-    Poll this endpoint to track ingestion progress.
-
-    Returns 404 if job not found.
-    """
+    """Get ingestion job status."""
     job = await get_job_status(job_id)
 
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
     return job
-
-
-@router.get("/{doc_id}", response_model=DocumentResponse)
-async def get_document(doc_id: str):
-    """Get document details by ID.
-
-    Returns document metadata including:
-    - Filename and title
-    - Grade and subject
-    - Page and chunk counts
-    - Processing status
-
-    Returns 404 if document not found.
-    """
-    # TODO: Implement database lookup
-    raise HTTPException(status_code=404, detail="Document not found")
-
-
-@router.delete("/{doc_id}")
-async def delete_document(doc_id: str):
-    """Delete a document and its chunks.
-
-    Removes:
-    - Document record from database
-    - Chunks from vector database
-    - File from storage
-
-    Returns 404 if document not found.
-    """
-    # TODO: Implement full deletion
-    raise HTTPException(status_code=404, detail="Document not found")

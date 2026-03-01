@@ -439,7 +439,7 @@ class TestMetaCache:
         _run(_seed_grades())
         # First call — populates cache
         data1 = client.get("/api/v1/meta/grades").json()
-        assert _get_cached("grades") is not None
+        assert _get_cached("grades:only_docs=False") is not None
 
         # Second call — should use cache
         data2 = client.get("/api/v1/meta/grades").json()
@@ -452,14 +452,16 @@ class TestMetaCache:
         client.get("/api/v1/meta/subjects?grade=S1")
         client.get("/api/v1/meta/subjects?grade=S2")
 
-        assert _get_cached("subjects:S1") is not None
-        assert _get_cached("subjects:S2") is not None
-        assert _get_cached("subjects:S1") is not _get_cached("subjects:S2")
+        assert _get_cached("subjects:grade=S1:only_docs=False") is not None
+        assert _get_cached("subjects:grade=S2:only_docs=False") is not None
+        cached_s1 = _get_cached("subjects:grade=S1:only_docs=False")
+        cached_s2 = _get_cached("subjects:grade=S2:only_docs=False")
+        assert cached_s1 is not cached_s2
         _run(_cleanup_all())
 
     def test_subjects_all_cache_key(self, client: TestClient):
         """Subjects without grade uses 'subjects:all' cache key."""
         _run(_seed_subjects())
         client.get("/api/v1/meta/subjects")
-        assert _get_cached("subjects:all") is not None
+        assert _get_cached("subjects:grade=None:only_docs=False") is not None
         _run(_cleanup_all())

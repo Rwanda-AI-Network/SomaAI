@@ -3,21 +3,21 @@
 from pydantic import BaseModel, Field
 
 
-# class GradeCreate(BaseModel):
-#     """Schema for creating a new grade level."""
+class GradeCreate(BaseModel):
+    """Schema for creating a new grade level."""
 
-#     id: str = Field(..., description="Grade ID (e.g., 'P1', 'S3')")
-#     name: str = Field(..., description="Display name (e.g., 'Primary 1', 'Senior 3')")
-#     display_order: int = Field(0, description="Sort order for UI")
-#     level: str = Field(..., description="Level category (primary/secondary)")
+    id: str = Field(..., description="Grade ID (e.g., 'P1', 'S3')")
+    name: str = Field(..., description="Display name (e.g., 'Primary 1', 'Senior 3')")
+    display_order: int = Field(0, description="Sort order for UI")
+    level: str = Field(..., description="Level category (primary/secondary)")
 
 
-# class GradeUpdate(BaseModel):
-#     """Schema for updating an existing grade level."""
+class GradeUpdate(BaseModel):
+    """Schema for updating an existing grade level."""
 
-#     name: str | None = Field(None, description="Display name")
-#     display_order: int | None = Field(None, description="Sort order for UI")
-#     level: str | None = Field(None, description="Level category")
+    name: str | None = Field(None, description="Display name")
+    display_order: int | None = Field(None, description="Sort order for UI")
+    level: str | None = Field(None, description="Level category")
 
 
 class GradeResponse(BaseModel):
@@ -32,21 +32,21 @@ class GradeResponse(BaseModel):
     level: str = Field(..., description="Level category (primary/secondary)")
 
 
-# class SubjectCreate(BaseModel):
-#     """Schema for creating a new subject."""
+class SubjectCreate(BaseModel):
+    """Schema for creating a new subject."""
 
-#     id: str = Field(..., description="Subject ID")
-#     name: str = Field(..., description="Display name")
-#     display_order: int = Field(0, description="Sort order for UI")
-#     icon: str | None = Field(None, description="Icon identifier for UI")
+    id: str = Field(..., description="Subject ID")
+    name: str = Field(..., description="Display name")
+    display_order: int = Field(0, description="Sort order for UI")
+    icon: str | None = Field(None, description="Icon identifier for UI")
 
 
-# class SubjectUpdate(BaseModel):
-#     """Schema for updating an existing subject."""
+class SubjectUpdate(BaseModel):
+    """Schema for updating an existing subject."""
 
-#     name: str | None = Field(None, description="Display name")
-#     display_order: int | None = Field(None, description="Sort order for UI")
-#     icon: str | None = Field(None, description="Icon identifier for UI")
+    name: str | None = Field(None, description="Display name")
+    display_order: int | None = Field(None, description="Sort order for UI")
+    icon: str | None = Field(None, description="Icon identifier for UI")
 
 
 class SubjectResponse(BaseModel):

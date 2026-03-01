@@ -36,14 +36,32 @@ async def test_ingestion_orchestrator_flow():
 
     try:
         # Patch the QdrantStore where it is defined
-        with patch(
-            "somaai.modules.knowledge.stores.qdrant.QdrantStore"
-        ) as mock_store_cls:
+        from contextlib import asynccontextmanager
+
+        with (
+            patch(
+                "somaai.modules.knowledge.stores.qdrant.QdrantStore"
+            ) as mock_store_cls,
+            patch("somaai.providers.storage.get_storage") as mock_storage_func,
+        ):
             # Configure Mock Store
             mock_store = AsyncMock()
             mock_store.exists_by_doc_id.return_value = False  # Not a duplicate
             mock_store.add.return_value = True  # Successful storage
             mock_store_cls.return_value = mock_store
+
+            # Mock storage for deduplication stage
+            mock_storage = AsyncMock()
+            mock_storage_func.return_value = mock_storage
+
+            mock_stream = AsyncMock()
+            mock_stream.hexdigest.return_value = "test-hash"
+
+            @asynccontextmanager
+            async def mock_open(*args, **kwargs):
+                yield mock_stream
+
+            mock_storage.open = mock_open
 
             # Instantiate orchestrator
             orchestrator = IngestionOrchestrator(settings)
@@ -51,7 +69,7 @@ async def test_ingestion_orchestrator_flow():
             # 2. Execute
             result = await orchestrator.run(
                 doc_id="test-pytest-001",
-                file_path=str(test_file),
+                file_path=test_file,
                 grade="S1",
                 subject="testing",
                 title="Pytest Document",
