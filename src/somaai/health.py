@@ -36,9 +36,11 @@ async def health_check(response: Response) -> dict:
 
     # 2. Check Qdrant
     try:
+        import asyncio
+
         client = get_qdrant_client(settings)
-        # Simple list_collections check is low-cost and verifies API auth+network
-        client.get_collections()
+        # get_collections() is synchronous — offload to thread to avoid blocking
+        await asyncio.to_thread(client.get_collections)
         health_status["components"]["qdrant"] = "healthy"
     except Exception as e:
         health_status["components"]["qdrant"] = f"unhealthy: {str(e)}"

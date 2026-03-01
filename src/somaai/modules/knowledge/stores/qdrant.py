@@ -69,6 +69,22 @@ def get_qdrant_client(settings: Settings) -> QdrantClient:
     return _QDRANT_CLIENT
 
 
+def close_qdrant_client() -> None:
+    """Close the singleton Qdrant client.
+
+    Call on application shutdown to release connections.
+    """
+    global _QDRANT_CLIENT
+    if _QDRANT_CLIENT is not None:
+        try:
+            _QDRANT_CLIENT.close()
+            logger.info("Qdrant client closed")
+        except Exception as e:
+            logger.warning("Error closing Qdrant client: %s", e)
+        finally:
+            _QDRANT_CLIENT = None
+
+
 class QdrantStore(VectorStore):
     """Qdrant vector store with LangChain integration.
 

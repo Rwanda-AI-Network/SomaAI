@@ -93,6 +93,12 @@ class Settings(BaseSettings):
     # RAG Settings
     rag_enable_input_validation: bool = True
 
+    # Monitoring
+    enable_metrics: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("SOMAAI_ENABLE_METRICS", "ENABLE_METRICS"),
+    )
+
     # LLM Backend
     llm_backend: str = "groq"
     groq_api_key: SecretStr | None = None

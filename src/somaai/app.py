@@ -44,18 +44,23 @@ async def lifespan(app: FastAPI):
 
         app.state.llm = MockLLMProvider()
 
-    # Update feature flag metrics
-    try:
-        from somaai.monitoring import update_feature_flags
+    # Initialize Prometheus metrics (gated by enable_metrics setting)
+    if settings.enable_metrics:
+        from somaai.monitoring import setup_metrics
 
-        update_feature_flags(settings)
-    except ImportError:
-        pass  # Monitoring not available
+        setup_metrics(settings)
 
     try:
         yield
     finally:
         await close_db()
+        # Close Qdrant connection pool
+        try:
+            from somaai.modules.knowledge.stores.qdrant import close_qdrant_client
+
+            close_qdrant_client()
+        except Exception:
+            pass
         app.state.llm = None
 
 
@@ -76,12 +81,13 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(api_router, prefix="/api")
 
-    # Add Prometheus metrics instrumentation
-    try:
-        from prometheus_fastapi_instrumentator import Instrumentator
+    # Add Prometheus metrics instrumentation (only when enabled)
+    if settings.enable_metrics:
+        try:
+            from prometheus_fastapi_instrumentator import Instrumentator
 
-        Instrumentator().instrument(app).expose(app, endpoint="/metrics")
-    except ImportError:
-        pass  # Optional dependency
+            Instrumentator().instrument(app).expose(app, endpoint="/metrics")
+        except ImportError:
+            pass  # Optional dependency
 
     return app

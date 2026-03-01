@@ -1,6 +1,13 @@
-"""Custom RAG monitoring metrics for Prometheus.
+"""Production monitoring metrics for Prometheus.
 
-Extends the basic HTTP metrics with RAG-specific observability.
+Single source of truth for all application metrics. Uses prometheus_client
+when available, falls back to no-op stubs so the app runs without it.
+
+Metrics are organized by domain:
+- RAG pipeline (requests, latency, quality)
+- Cache (hit rate, operations)
+- Ingestion (documents, latency)
+- System health (service connectivity, pool stats)
 """
 
 import logging
@@ -10,14 +17,17 @@ from functools import wraps
 from typing import Any
 
 try:
-    from prometheus_client import Counter, Gauge, Histogram
+    from prometheus_client import Counter, Gauge, Histogram, Info
 
     PROMETHEUS_AVAILABLE = True
 except ImportError:
     PROMETHEUS_AVAILABLE = False
 
-    # Create no-op classes if Prometheus not available
-    class Counter:  # type: ignore[no-redef]
+    # ── No-op stubs when prometheus_client is not installed ──────────
+
+    class _NoOpMetric:
+        """Base no-op metric that silently discards all calls."""
+
         def __init__(self, *args, **kwargs):
             pass
 
@@ -27,131 +37,186 @@ except ImportError:
         def inc(self, *args):
             pass
 
-    class Histogram:  # type: ignore[no-redef]
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def labels(self, **kwargs):
-            return self
-
-        def observe(self, *args):
-            pass
-
-    class Gauge:  # type: ignore[no-redef]
-        def __init__(self, *args, **kwargs):
+        def dec(self, *args):
             pass
 
         def set(self, *args):
             pass
 
+        def observe(self, *args):
+            pass
+
+        def info(self, *args):
+            pass
+
+    Counter = _NoOpMetric  # type: ignore[misc,assignment]
+    Histogram = _NoOpMetric  # type: ignore[misc,assignment]
+    Gauge = _NoOpMetric  # type: ignore[misc,assignment]
+    Info = _NoOpMetric  # type: ignore[misc,assignment]
+
 
 logger = logging.getLogger(__name__)
 
-# ============================================================================
+# Metric prefix for namespacing
+_PREFIX = "somaai"
+
+# Runtime flag — set to True by setup_metrics() when the app opts in.
+# This ensures no Prometheus writes happen if settings.enable_metrics is False.
+_metrics_enabled = False
+
+# ════════════════════════════════════════════════════════════════════
+# Application Info
+# ════════════════════════════════════════════════════════════════════
+
+app_info = Info(
+    f"{_PREFIX}_app",
+    "Application build information",
+)
+
+# ════════════════════════════════════════════════════════════════════
 # RAG Request Metrics
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════
 
 rag_requests_total = Counter(
-    "rag_requests_total",
-    "Total RAG requests",
+    f"{_PREFIX}_rag_requests_total",
+    "Total RAG requests processed",
     ["grade", "subject", "user_role", "status"],
 )
 
 rag_latency_seconds = Histogram(
-    "rag_latency_seconds",
+    f"{_PREFIX}_rag_latency_seconds",
     "RAG request latency in seconds",
-    ["stage"],  # retrieval, reranking, generation, total
-    buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0],
+    ["stage"],  # retrieval, generation, total
+    buckets=[0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0],
 )
 
-# ============================================================================
-# Quality Metrics
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════
+# RAG Quality Metrics
+# ════════════════════════════════════════════════════════════════════
 
 rag_confidence_score = Histogram(
-    "rag_confidence_score",
-    "Confidence score distribution",
-    buckets=[0.0, 0.3, 0.5, 0.7, 0.85, 0.95, 1.0],
+    f"{_PREFIX}_rag_confidence_score",
+    "Distribution of RAG response confidence scores",
+    buckets=[0.0, 0.1, 0.3, 0.5, 0.7, 0.85, 0.95, 1.0],
 )
 
 rag_empty_results_total = Counter(
-    "rag_empty_results_total", "Queries with no results", ["grade", "subject"]
-)
-
-rag_fallback_level_total = Counter(
-    "rag_fallback_level_total",
-    "Retrieval fallback level triggered",
-    ["level"],  # 0=exact, 1=grade_only, 2=no_filters
+    f"{_PREFIX}_rag_empty_results_total",
+    "Queries that returned zero documents",
+    ["grade", "subject"],
 )
 
 rag_sufficiency_total = Counter(
-    "rag_sufficiency_total",
+    f"{_PREFIX}_rag_sufficiency_total",
     "Response sufficiency distribution",
     ["sufficiency"],  # sufficient, partial, insufficient
 )
 
-# ============================================================================
+rag_docs_retrieved = Histogram(
+    f"{_PREFIX}_rag_docs_retrieved",
+    "Number of documents retrieved per query",
+    buckets=[0, 1, 3, 5, 10, 20, 50],
+)
+
+# ════════════════════════════════════════════════════════════════════
 # Cache Metrics
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════
 
 cache_operations_total = Counter(
-    "cache_operations_total",
-    "Cache operations",
+    f"{_PREFIX}_cache_operations_total",
+    "Cache operations by type and result",
     ["cache_type", "operation", "status"],  # embedding/response, get/set, hit/miss
 )
 
-cache_hit_rate = Gauge("cache_hit_rate", "Cache hit rate percentage", ["cache_type"])
-
-# ============================================================================
-# System Health Metrics
-# ============================================================================
-
-qdrant_connection_status = Gauge(
-    "qdrant_connection_status", "Qdrant connection status (1=connected, 0=disconnected)"
+cache_hit_ratio = Gauge(
+    f"{_PREFIX}_cache_hit_ratio",
+    "Rolling cache hit ratio (0.0–1.0)",
+    ["cache_type"],
 )
 
-redis_connection_status = Gauge(
-    "redis_connection_status", "Redis connection status (1=connected, 0=disconnected)"
+# ════════════════════════════════════════════════════════════════════
+# Ingestion Metrics
+# ════════════════════════════════════════════════════════════════════
+
+ingestion_total = Counter(
+    f"{_PREFIX}_ingestion_total",
+    "Total document ingestions",
+    ["status"],  # success, error
+)
+
+ingestion_latency_seconds = Histogram(
+    f"{_PREFIX}_ingestion_latency_seconds",
+    "Document ingestion latency in seconds",
+    buckets=[1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0],
+)
+
+ingestion_chunks_created = Histogram(
+    f"{_PREFIX}_ingestion_chunks_created",
+    "Number of chunks created per ingestion",
+    buckets=[1, 5, 10, 25, 50, 100, 250, 500],
+)
+
+# ════════════════════════════════════════════════════════════════════
+# System Health Metrics
+# ════════════════════════════════════════════════════════════════════
+
+service_up = Gauge(
+    f"{_PREFIX}_service_up",
+    "Service connectivity (1=connected, 0=disconnected)",
+    ["service"],  # qdrant, redis, postgres
 )
 
 llm_api_errors_total = Counter(
-    "llm_api_errors_total", "LLM API errors", ["provider", "error_type"]
+    f"{_PREFIX}_llm_api_errors_total",
+    "LLM API errors by provider and error type",
+    ["provider", "error_type"],
 )
 
-# ============================================================================
-# Feature Flag Metrics
-# ============================================================================
-
-rag_feature_flags = Gauge(
-    "rag_feature_flags", "RAG feature flag status (1=enabled, 0=disabled)", ["feature"]
+llm_api_latency_seconds = Histogram(
+    f"{_PREFIX}_llm_api_latency_seconds",
+    "LLM API call latency in seconds",
+    ["provider"],
+    buckets=[0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0],
 )
 
-# ============================================================================
-# Decorators for Automatic Instrumentation
-# ============================================================================
+# ════════════════════════════════════════════════════════════════════
+# Feature Flags
+# ════════════════════════════════════════════════════════════════════
+
+feature_flags = Gauge(
+    f"{_PREFIX}_feature_flag",
+    "Feature flag status (1=enabled, 0=disabled)",
+    ["feature"],
+)
+
+
+# ════════════════════════════════════════════════════════════════════
+# Decorators
+# ════════════════════════════════════════════════════════════════════
 
 
 def monitor_rag_stage(stage_name: str):
-    """Decorator to monitor RAG pipeline stages.
+    """Decorator to time RAG pipeline stages.
 
-    Usage:
+    Usage::
+
         @monitor_rag_stage("retrieval")
-        async def retrieve(...):
+        async def retrieve(self, ...):
             ...
     """
 
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
-            start_time = time.time()
+            start = time.perf_counter()
             try:
                 result = await func(*args, **kwargs)
-                latency = time.time() - start_time
-                rag_latency_seconds.labels(stage=stage_name).observe(latency)
+                elapsed = time.perf_counter() - start
+                rag_latency_seconds.labels(stage=stage_name).observe(elapsed)
                 return result
             except Exception:
-                latency = time.time() - start_time
-                rag_latency_seconds.labels(stage=f"{stage_name}_error").observe(latency)
+                elapsed = time.perf_counter() - start
+                rag_latency_seconds.labels(stage=f"{stage_name}_error").observe(elapsed)
                 raise
 
         return wrapper
@@ -159,35 +224,76 @@ def monitor_rag_stage(stage_name: str):
     return decorator
 
 
-# ============================================================================
-# Helper Functions
-# ============================================================================
+def monitor_latency(metric: Any, **label_kwargs):
+    """Generic decorator to observe latency on any Histogram.
 
+    Usage::
 
-def update_feature_flags(settings):
-    """Update feature flag metrics from settings.
-
-    Call this on application startup.
+        @monitor_latency(ingestion_latency_seconds)
+        async def ingest(self, ...):
+            ...
     """
+
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def wrapper(*args, **kwargs) -> Any:
+            start = time.perf_counter()
+            try:
+                result = await func(*args, **kwargs)
+                elapsed = time.perf_counter() - start
+                if label_kwargs:
+                    metric.labels(**label_kwargs).observe(elapsed)
+                else:
+                    metric.observe(elapsed)
+                return result
+            except Exception:
+                raise
+
+        return wrapper
+
+    return decorator
+
+
+# ════════════════════════════════════════════════════════════════════
+# Helper Functions
+# ════════════════════════════════════════════════════════════════════
+
+
+def setup_metrics(settings) -> None:
+    """Initialize metrics on application startup.
+
+    Sets app info and feature flags from current settings.
+    Call this once during the FastAPI lifespan. This flips _metrics_enabled
+    to True so that helper functions start writing to Prometheus.
+    """
+    global _metrics_enabled  # noqa: PLW0603
+
     if not PROMETHEUS_AVAILABLE:
+        logger.info("Prometheus client not installed — metrics disabled")
         return
 
     try:
-        rag_feature_flags.labels(feature="hyde").set(
-            1 if getattr(settings, "rag_enable_hyde", False) else 0
-        )
-        rag_feature_flags.labels(feature="reranking").set(
-            1 if getattr(settings, "rag_enable_reranking", False) else 0
-        )
-        rag_feature_flags.labels(feature="input_validation").set(
+        # App info
+        app_info.info({
+            "version": getattr(settings, "version", "unknown"),
+            "app_name": getattr(settings, "app_name", "somaai"),
+        })
+
+        # Feature flags — only report flags that actually exist in Settings
+        feature_flags.labels(feature="input_validation").set(
             1 if getattr(settings, "rag_enable_input_validation", True) else 0
         )
-        rag_feature_flags.labels(feature="simplified_retrieval").set(
-            1 if getattr(settings, "rag_use_simplified_retrieval", True) else 0
+        feature_flags.labels(feature="debug").set(
+            1 if getattr(settings, "debug", False) else 0
         )
-        logger.info("Feature flag metrics updated")
+        feature_flags.labels(feature="require_api_key").set(
+            1 if getattr(settings, "require_api_key", False) else 0
+        )
+
+        _metrics_enabled = True
+        logger.info("Prometheus metrics initialized and enabled")
     except Exception as e:
-        logger.warning(f"Failed to update feature flag metrics: {e}")
+        logger.warning("Failed to initialize metrics: %s", e)
 
 
 def log_rag_request(
@@ -202,26 +308,31 @@ def log_rag_request(
     confidence: float = 0.0,
     sufficiency: str = "unknown",
     error: str | None = None,
-):
-    """Log RAG request with structured data and metrics.
+) -> None:
+    """Log RAG request with structured data AND update Prometheus metrics.
 
-    This function both logs to the application logger and updates Prometheus metrics.
+    This is the single place where both structured logging and metric
+    updates happen for a RAG request.
     """
-    # Update Prometheus metrics
     status = "success" if success else "error"
-    rag_requests_total.labels(
-        grade=grade, subject=subject, user_role=user_role, status=status
-    ).inc()
 
-    if success:
-        rag_confidence_score.observe(confidence)
-        rag_sufficiency_total.labels(sufficiency=sufficiency).inc()
+    # ── Prometheus counters (only when metrics are enabled) ──
+    if _metrics_enabled:
+        rag_requests_total.labels(
+            grade=grade, subject=subject, user_role=user_role, status=status
+        ).inc()
 
-        if docs_retrieved == 0:
-            rag_empty_results_total.labels(grade=grade, subject=subject).inc()
+        rag_latency_seconds.labels(stage="total").observe(latency_ms / 1000)
+        rag_docs_retrieved.observe(docs_retrieved)
 
-    # Structured logging
-    log_data = {
+        if success:
+            rag_confidence_score.observe(confidence)
+            rag_sufficiency_total.labels(sufficiency=sufficiency).inc()
+            if docs_retrieved == 0:
+                rag_empty_results_total.labels(grade=grade, subject=subject).inc()
+
+    # ── Structured log ──
+    log_data: dict[str, Any] = {
         "event": "rag_request",
         "query_length": len(query),
         "grade": grade,
@@ -229,12 +340,11 @@ def log_rag_request(
         "user_role": user_role,
         "docs_retrieved": docs_retrieved,
         "docs_reranked": docs_reranked,
-        "latency_ms": latency_ms,
+        "latency_ms": round(latency_ms, 2),
         "success": success,
-        "confidence": confidence,
+        "confidence": round(confidence, 3),
         "sufficiency": sufficiency,
     }
-
     if error:
         log_data["error"] = error
 
@@ -244,11 +354,63 @@ def log_rag_request(
         logger.error("RAG request failed", extra=log_data)
 
 
-# ============================================================================
-# Initialization
-# ============================================================================
+def log_ingestion(
+    doc_id: str,
+    chunks_created: int,
+    pages_processed: int,
+    latency_ms: float,
+    success: bool = True,
+    error: str | None = None,
+) -> None:
+    """Log a document ingestion with structured data AND Prometheus metrics."""
+    status = "success" if success else "error"
+
+    if _metrics_enabled:
+        ingestion_total.labels(status=status).inc()
+        ingestion_latency_seconds.observe(latency_ms / 1000)
+
+        if success:
+            ingestion_chunks_created.observe(chunks_created)
+
+    log_data: dict[str, Any] = {
+        "event": "ingestion",
+        "doc_id": doc_id,
+        "chunks_created": chunks_created,
+        "pages_processed": pages_processed,
+        "latency_ms": round(latency_ms, 2),
+        "success": success,
+    }
+    if error:
+        log_data["error"] = error
+
+    if success:
+        logger.info("Document ingested", extra=log_data)
+    else:
+        logger.error("Ingestion failed", extra=log_data)
+
+
+def record_service_status(service: str, is_up: bool) -> None:
+    """Record service connectivity for health dashboards."""
+    if _metrics_enabled:
+        service_up.labels(service=service).set(1 if is_up else 0)
+
+
+def record_cache_operation(
+    cache_type: str, operation: str, hit: bool
+) -> None:
+    """Record a cache get/set with hit/miss status."""
+    if _metrics_enabled:
+        status = "hit" if hit else "miss"
+        cache_operations_total.labels(
+            cache_type=cache_type, operation=operation, status=status
+        ).inc()
+
+
+# ════════════════════════════════════════════════════════════════════
+# Module-level init log
+# ════════════════════════════════════════════════════════════════════
 
 if PROMETHEUS_AVAILABLE:
-    logger.info("Custom RAG metrics initialized")
+    logger.info("Prometheus client available — custom metrics registered")
 else:
-    logger.warning("Prometheus not available, metrics disabled")
+    logger.info("Prometheus client not installed — using no-op metric stubs")

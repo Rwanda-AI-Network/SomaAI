@@ -52,15 +52,18 @@ class S3Provider(StorageBackend):
         self.bucket = bucket or settings.s3_bucket
         self.region = region or settings.s3_region
         self.access_key = access_key or settings.s3_access_key
-        self.secret_key = (
-            secret_key.get_secret_value()
-            if hasattr(secret_key, "get_secret_value")
-            else secret_key
-        ) or (
-            settings.s3_secret_key.get_secret_value()
-            if settings.s3_secret_key
-            else None
-        )
+        if secret_key is not None:
+            self.secret_key = (
+                secret_key.get_secret_value()
+                if hasattr(secret_key, "get_secret_value")
+                else secret_key
+            )
+        else:
+            self.secret_key = (
+                settings.s3_secret_key.get_secret_value()
+                if settings.s3_secret_key
+                else None
+            )
         self.endpoint_url = endpoint_url or settings.s3_endpoint_url
 
         # Reuse a single session across all operations

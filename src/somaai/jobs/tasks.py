@@ -6,6 +6,11 @@ Tasks are executed by the worker process.
 
 from __future__ import annotations
 
+# Ensure worker processes use the same structured logging as the HTTP server.
+from somaai.logging_conf import setup_logging
+
+setup_logging()
+
 from typing import Any
 
 from somaai.contracts.jobs import JobStatus

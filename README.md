@@ -48,6 +48,7 @@ App runs at http://localhost:8000 · Swagger at http://localhost:8000/docs
 | [RETRIEVAL.md](docs/RETRIEVAL.md) | Dense retrieval, fallback strategy, reranker/BM25 status |
 | [DEVELOPMENT.md](docs/DEVELOPMENT.md) | Local setup, environment variables, debugging, testing |
 | [ROADMAP.md](docs/ROADMAP.md) | MVP status, prioritized improvements |
+| [monitoring.md](docs/monitoring.md) | Prometheus metrics, alerts, and Grafana dashboards |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branch strategy, commit conventions, PR process |
 | [docs/api.md](docs/api.md) | API endpoint reference |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
@@ -75,7 +76,7 @@ App runs at http://localhost:8000 · Swagger at http://localhost:8000/docs
 
 ## Project Structure
 
-```
+```bash
 src/somaai/
 ├── api/v1/endpoints/   # FastAPI route handlers
 ├── contracts/          # Pydantic request/response schemas
@@ -98,4 +99,4 @@ src/somaai/
 
 ## License
 
-MIT
+[MIT](./LICENSE)
