@@ -51,7 +51,15 @@ class MinioProvider(StorageBackend):
 
         self.endpoint = endpoint or settings.minio_endpoint
         self.access_key = access_key or settings.minio_access_key
-        self.secret_key = secret_key or settings.minio_secret_key
+        self.secret_key = (
+            secret_key.get_secret_value()
+            if hasattr(secret_key, "get_secret_value")
+            else secret_key
+        ) or (
+            settings.minio_secret_key.get_secret_value()
+            if settings.minio_secret_key
+            else None
+        )
         self.bucket = bucket or settings.minio_bucket
         self.secure = secure if secure is not None else settings.minio_secure
 

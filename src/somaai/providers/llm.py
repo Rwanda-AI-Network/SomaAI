@@ -115,7 +115,8 @@ def get_llm(settings: Settings, fallback_to_mock: bool = False) -> LLMClient:
             if not settings.openai_model:
                 raise ValueError("OPENAI_MODEL is required for OpenAI backend")
             return OpenAILLMProvider(
-                api_key=settings.openai_api_key, model=settings.openai_model
+                api_key=settings.openai_api_key.get_secret_value(),
+                model=settings.openai_model,
             )
 
         if backend == "groq":
@@ -124,7 +125,8 @@ def get_llm(settings: Settings, fallback_to_mock: bool = False) -> LLMClient:
             if not settings.groq_model:
                 raise ValueError("GROQ_MODEL is required for Groq backend")
             return GroqLLMProvider(
-                api_key=settings.groq_api_key, model=settings.groq_model
+                api_key=settings.groq_api_key.get_secret_value(),
+                model=settings.groq_model,
             )
 
         if backend == "huggingface":

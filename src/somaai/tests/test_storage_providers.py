@@ -397,6 +397,11 @@ class TestS3Provider:
         p.secret_key = "secret"
         p.endpoint_url = None
 
+        from somaai.settings import SecretStr
+
+        mock_settings = MagicMock()
+        mock_settings.s3_secret_key = SecretStr("secret")
+
         mock_session = MagicMock()
         mock_session.client.return_value = mock_s3_client
         p._session = mock_session
@@ -549,7 +554,9 @@ class TestStorageFactory:
             mock_settings.storage_backend = "minio"
             mock_settings.minio_endpoint = "localhost:9000"
             mock_settings.minio_access_key = "minioadmin"
-            mock_settings.minio_secret_key = "minioadmin"
+            from somaai.settings import SecretStr
+
+            mock_settings.minio_secret_key = SecretStr("minioadmin")
             mock_settings.minio_bucket = "test"
             mock_settings.minio_secure = False
 
