@@ -36,7 +36,8 @@ async def lifespan(app: FastAPI):
 
     if not os.getenv("TESTING"):
         get_embeddings_model(settings)
-        app.state.llm = get_llm(settings)
+        # Use fallback_to_mock in debug mode to avoid startup crashes
+        app.state.llm = get_llm(settings, fallback_to_mock=settings.debug)
     else:
         # In tests, use MockLLMProvider to avoid external calls
         from somaai.providers.llm import MockLLMProvider
