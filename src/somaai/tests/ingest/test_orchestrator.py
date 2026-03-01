@@ -45,6 +45,7 @@ async def test_ingestion_orchestrator_flow():
             patch("somaai.providers.storage.get_storage") as mock_storage_func,
         ):
             from unittest.mock import MagicMock
+
             # Configure Mock Store
             mock_store = AsyncMock()
             mock_store.exists_by_doc_id.return_value = False
@@ -68,7 +69,9 @@ async def test_ingestion_orchestrator_flow():
             with (
                 patch("somaai.db.session.async_session_maker") as mock_session_maker,
                 patch("somaai.db.crud.create_chunks", new_callable=AsyncMock),
-                patch("somaai.db.crud.update_document_processed", new_callable=AsyncMock),
+                patch(
+                    "somaai.db.crud.update_document_processed", new_callable=AsyncMock
+                ),
                 patch("somaai.db.crud.update_document_status", new_callable=AsyncMock),
             ):
                 mock_session = AsyncMock()

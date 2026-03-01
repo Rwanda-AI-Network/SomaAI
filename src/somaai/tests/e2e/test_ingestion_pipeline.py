@@ -26,6 +26,7 @@ async def test_ingestion_flow():
         patch("somaai.providers.storage.get_storage") as mock_storage_func,
     ):
         from unittest.mock import MagicMock
+
         mock_store = AsyncMock()
         mock_store.exists_by_doc_id.return_value = False
         mock_store.add.return_value = []
