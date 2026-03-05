@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from somaai.contracts.common import GradeLevel, Subject
+
 from somaai.contracts.docs import IngestJobResponse
 from somaai.db.session import get_session
 from somaai.services.ingest_service import IngestionService
@@ -82,8 +82,8 @@ async def init_upload(
     filename: str,
     total_size: int,
     total_chunks: int,
-    grade: GradeLevel,
-    subject: Subject,
+    grade: str,
+    subject: str,
     title: str | None = None,
 ) -> dict:
     """Initialize a chunked upload session with curriculum metadata.
@@ -111,8 +111,8 @@ async def init_upload(
         "filename": filename,
         "total_size": total_size,
         "total_chunks": total_chunks,
-        "grade": grade.value,
-        "subject": subject.value,
+        "grade": grade,
+        "subject": subject,
         "title": title or Path(filename).stem,
         "received_chunks": [],
         "staging_prefix": f"_uploads/{upload_id}",
@@ -256,8 +256,8 @@ async def complete_upload(
         db=db,
         doc_id=generate_id(),
         storage_key=object_key,
-        grade=GradeLevel(session["grade"]),
-        subject=Subject(session["subject"]),
+        grade=session["grade"],
+        subject=session["subject"],
         title=session["title"],
         filename=filename,
         content_hash=content_hash,

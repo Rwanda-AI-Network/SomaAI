@@ -111,5 +111,13 @@ class Settings(BaseSettings):
     # Security
     require_api_key: bool = False  # Enable in production
 
+    # Session
+    session_cookie_secure: bool = False  # True in production (HTTPS only)
+    session_ttl_days: int = 90
+
+    # Rate Limits (slowapi format)
+    rate_limit_ask: str = "20/hour"
+    rate_limit_create_conversation: str = "5/hour"
+
 
 settings = Settings()

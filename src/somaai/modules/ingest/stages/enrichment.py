@@ -36,7 +36,7 @@ class MetadataEnrichmentStage(PipelineStage):
             page_num = chunk.metadata.get("page", 1)
 
             # Normalize grade/subject to canonical casing.
-            # Grade: UPPERCASE (matches GradeLevel enum: P6, S1, S6)
+            # Grade: UPPERCASE (matches DB convention: P6, S1, S6)
             # Subject: lowercase (matches Subject enum: computer_science)
             grade = (ctx.grade or "").strip().upper()
             subject = (ctx.subject or "").strip().lower()

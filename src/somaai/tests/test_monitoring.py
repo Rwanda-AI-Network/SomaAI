@@ -41,7 +41,7 @@ class TestLogRagRequest:
         log_rag_request(
             query="broken query",
             grade="P6",
-            subject="math",
+            subject="mathematics",
             user_role="teacher",
             docs_retrieved=0,
             docs_reranked=0,

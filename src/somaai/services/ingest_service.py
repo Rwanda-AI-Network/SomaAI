@@ -14,8 +14,6 @@ from somaai.providers.storage import get_storage
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from somaai.contracts.common import GradeLevel, Subject
-
 logger = logging.getLogger(__name__)
 
 
@@ -27,8 +25,8 @@ class IngestionService:
         db: AsyncSession,
         doc_id: str,
         storage_key: str,
-        grade: GradeLevel,
-        subject: Subject,
+        grade: str,
+        subject: str,
         title: str,
         filename: str,
         content_hash: str | None = None,
@@ -48,8 +46,8 @@ class IngestionService:
             filename=filename,
             title=title,
             storage_path=storage_key,
-            grade=grade.value,
-            subject=subject.value,
+            grade=grade,
+            subject=subject,
             storage_backend=storage_backend,
             status="pending",
             content_hash=content_hash,
@@ -62,8 +60,8 @@ class IngestionService:
                 "doc_id": doc_id,
                 "storage_key": storage_key,
                 "content_hash": content_hash,
-                "grade": grade.value,
-                "subject": subject.value,
+                "grade": grade,
+                "subject": subject,
                 "title": title,
             },
         )

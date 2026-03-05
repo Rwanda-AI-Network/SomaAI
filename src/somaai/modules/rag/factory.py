@@ -8,20 +8,27 @@ from somaai.modules.rag.pipelines import RAGPipeline
 from somaai.providers.llm import LLMClient
 from somaai.settings import Settings
 
+# Module-level singleton — RAGPipeline is stateless; its Retriever
+# and LLMGenerator already lazy-init their own singletons, so
+# re-creating the pipeline per request is pure waste.
+_RAG_PIPELINE: RAGPipeline | None = None
+
 
 def get_rag_pipeline(settings: Settings, llm: LLMClient) -> RAGPipeline:
-    """Create RAG pipeline based on settings.
+    """Get or create singleton RAG pipeline.
 
     Args:
         settings: Application settings
         llm: Initialized LLM client
 
     Returns:
-        Configured RAG pipeline instance
+        Cached RAG pipeline instance
 
     Raises:
         RuntimeError: If llm_backend is "mock" outside of tests
     """
+    global _RAG_PIPELINE
+
     _backend = (settings.llm_backend or "groq").lower()
 
     if _backend == "mock":
@@ -38,4 +45,8 @@ def get_rag_pipeline(settings: Settings, llm: LLMClient) -> RAGPipeline:
                 "provider, or set TESTING=1 for test mode."
             )
 
-    return RAGPipeline(settings=settings)
+    if _RAG_PIPELINE is None:
+        _RAG_PIPELINE = RAGPipeline(settings=settings)
+
+    return _RAG_PIPELINE
+

@@ -69,13 +69,22 @@ async def run_test():
             "grade": "S1",
             "subject": "social_studies",
             "user_role": "student",
-            "session_id": "test-session-1",
         }
         # Anonymous header
         headers = {"X-Actor-Id": "test-user-1"}
 
+        # Create a conversation first, then ask within it
+        conv_resp = await client.post(
+            f"{BASE_URL}/chat/conversations",
+            json={"grade": "S1", "subject": "social_studies"},
+            headers=headers,
+        )
+        conv_id = conv_resp.json().get("id", "test-conv-1")
+
         resp = await client.post(
-            f"{BASE_URL}/chat/ask", json=chat_payload, headers=headers
+            f"{BASE_URL}/chat/conversations/{conv_id}/ask",
+            json=chat_payload,
+            headers=headers,
         )
 
         if resp.status_code not in (200, 201):

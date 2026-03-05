@@ -67,7 +67,7 @@ class Retriever:
             query: User's question
             top_k: Number of documents to retrieve
             grade: Filter by grade level (e.g., "S1", "P6")
-            subject: Subject filter (reserved for future use, not applied)
+            subject: Subject filter (e.g., "mathematics", "general")
 
         Returns:
             List of documents with content, metadata, and scores
@@ -89,7 +89,7 @@ class Retriever:
             query = query.strip()
 
         # Normalize metadata filters to canonical casing.
-        # Grade: UPPERCASE (matches GradeLevel enum: P6, S1, S6)
+        # Grade: UPPERCASE (matches DB convention: P6, S1, S6)
         # Subject: lowercase (matches Subject enum: computer_science)
         if grade:
             grade = grade.strip().upper()
@@ -100,14 +100,11 @@ class Retriever:
 
         try:
             # Dense retrieval using Qdrant vector store
-            # NOTE: subject filter disabled for now — only grade is applied.
-            # Subject filtering will be re-enabled once ingestion metadata
-            # is aligned with frontend selections.
             docs = await self.store.search(
                 query=query,
                 top_k=top_k,
                 grade=grade,
-                subject=None,  # Disabled: subject filter not yet supported
+                subject=subject,
             )
 
             # Log retrieval metrics
@@ -161,7 +158,7 @@ class Retriever:
         Args:
             query: User's question
             grade: Grade level filter
-            subject: Subject filter (reserved for future use)
+            subject: Subject filter (e.g., "mathematics", "general")
             top_k: Number of documents
             min_score: Minimum relevance score
             min_results: Minimum acceptable result count
@@ -278,7 +275,7 @@ class Retriever:
         Args:
             query: User's question
             grade: Grade level filter
-            subject: Subject filter (reserved for future use)
+            subject: Subject filter (e.g., "mathematics", "general")
             max_tokens: Maximum tokens for context window
             use_fallback: Whether to use fallback strategy
 

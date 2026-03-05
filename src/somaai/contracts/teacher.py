@@ -4,14 +4,14 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from somaai.contracts.common import GradeLevel, Subject
+
 
 
 class ClassTaught(BaseModel):
     """A class (grade + subject combination) taught by a teacher."""
 
-    grade: GradeLevel = Field(..., description="Grade level")
-    subject: Subject = Field(..., description="Subject")
+    grade: str = Field(..., description="Grade level")
+    subject: str = Field(..., description="Subject")
 
 
 class TeacherProfileRequest(BaseModel):

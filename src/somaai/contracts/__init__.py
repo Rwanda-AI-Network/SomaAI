@@ -11,9 +11,7 @@ from somaai.contracts.chat import (
     MessageResponse,
 )
 from somaai.contracts.common import (
-    GradeLevel,
     PaginatedResponse,
-    Subject,
     UserRole,
 )
 from somaai.contracts.docs import (
@@ -53,8 +51,6 @@ __all__ = [
     # Common
     "PaginatedResponse",
     "UserRole",
-    "GradeLevel",
-    "Subject",
     # Errors
     "ErrorResponse",
     "ValidationErrorResponse",

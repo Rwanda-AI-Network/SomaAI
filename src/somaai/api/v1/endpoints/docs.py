@@ -55,7 +55,6 @@ async def get_document_metadata(
         chunk_count=int(doc.chunk_count or 0),
         status=str(doc.status or "pending"),
         error_message=doc.error_message,
-        storage_backend=str(doc.storage_backend or "local"),
         uploaded_at=doc.uploaded_at,
         processed_at=doc.processed_at,
         metadata=doc.metadata_json,

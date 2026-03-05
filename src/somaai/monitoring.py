@@ -334,8 +334,12 @@ def log_rag_request(
                 rag_empty_results_total.labels(grade=grade, subject=subject).inc()
 
     # ── Structured log ──
+    from somaai.utils.logging_ext import actor_id_ctx, conversation_id_ctx
+
     log_data: dict[str, Any] = {
         "event": "rag_request",
+        "actor_id": actor_id_ctx.get() or "-",
+        "conversation_id": conversation_id_ctx.get() or "-",
         "query_length": len(query),
         "grade": grade,
         "subject": subject,

@@ -54,6 +54,12 @@ async_session_maker = async_sessionmaker(
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """Get an async database session.
 
+    The session is yielded without auto-commit.  Every write path
+    (CRUD helpers, service methods) calls ``await db.commit()``
+    explicitly, so committing here would be a wasteful double round
+    trip.  On exception the session is rolled back; cleanup is handled
+    by the ``async with`` context manager.
+
     Usage with FastAPI:
         @router.get("/items")
         async def get_items(db: AsyncSession = Depends(get_session)):
@@ -63,12 +69,9 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_maker() as session:
         try:
             yield session
-            await session.commit()
         except Exception:
             await session.rollback()
             raise
-        finally:
-            await session.close()
 
 
 async def init_db() -> None:

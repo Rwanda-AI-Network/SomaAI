@@ -35,7 +35,6 @@ class BaseRAGPipeline(Protocol):
         grade: str = "S1",
         subject: str = "general",
         user_role: str = "student",
-        session_id: str | None = None,
         preferences: dict | None = None,
         history: str = "",
     ) -> dict: ...
@@ -76,7 +75,6 @@ class RAGPipeline:
         grade: str = "S1",
         subject: str = "general",
         user_role: str = "student",
-        session_id: str | None = None,
         preferences: dict | None = None,
         history: str = "",
     ) -> dict:
@@ -87,7 +85,6 @@ class RAGPipeline:
             grade: Grade level (e.g., "S1", "P6")
             subject: Subject (e.g., "mathematics", "biology")
             user_role: 'student' or 'teacher'
-            session_id: Optional session for context
             preferences: Dict with 'enable_analogy' and 'enable_realworld'
             history: Previous conversation history
 
@@ -296,7 +293,7 @@ class RAGPipeline:
         self,
         query: str,
         grade: str,
-        subject: str,
+        subject: str = "general",
     ) -> dict:
         """Generate response when no relevant documents found.
 

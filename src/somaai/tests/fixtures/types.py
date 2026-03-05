@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from somaai.contracts.common import GradeLevel, Subject, UserRole
+from somaai.contracts.common import UserRole
 
 
 @dataclass(frozen=True)
@@ -12,10 +12,9 @@ class RAGInput:
     """Input for RAG pipeline execution."""
 
     query: str
-    grade: GradeLevel
-    subject: Subject
+    grade: str
+    subject: str
     user_role: UserRole
-    teaching_classes: list[GradeLevel] | None = None
     enable_analogy: bool = False
     enable_realworld: bool = False
     history: str = ""

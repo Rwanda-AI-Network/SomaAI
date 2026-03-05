@@ -57,11 +57,15 @@ class CitationExtractor:
         Returns:
             Tuple of:
                 - List of CitationResponse objects
-                - chunks_map: Dict mapping "doc_id:page" -> chunk_id for persistence
+                - chunks_map: Dict mapping chunk_id -> CitationResponse index
+                  for persistence. Keys are chunk_ids (not composite doc+page)
+                  to avoid collisions when multiple chunks share the same page.
         """
         citations = []
-        chunks_map = {}  # For linking back to chunk_id during save
-        seen = set()
+        # chunk_id -> order index; used by save_citations for FK resolution.
+        # Keyed by chunk_id directly to avoid doc+page collision.
+        chunks_map: dict[str, str] = {}
+        seen: set[str] = set()
 
         # Sort by score descending
         sorted_chunks = sorted(
@@ -85,20 +89,22 @@ class CitationExtractor:
             if score < min_score:
                 continue
 
-            # Deduplicate by doc_id + page
-            key = f"{doc_id}:{page}"
-            if key in seen:
+            # Deduplicate by doc_id + page (same document page = same content)
+            dedup_key = f"{doc_id}:{page}"
+            if dedup_key in seen:
                 continue
-            seen.add(key)
+            seen.add(dedup_key)
 
-            # Track chunk_id for persistence
+            # Track chunk_id for persistence — keyed by chunk_id directly
+            # so each citation maps unambiguously to its source chunk.
             if chunk_id:
-                chunks_map[key] = chunk_id
+                chunks_map[chunk_id] = chunk_id
 
             citations.append(
                 CitationResponse(
                     doc_id=doc_id,
                     doc_title=meta.get("title", "Unknown Document"),
+                    section_title=meta.get("section_title"),
                     page_start=page,
                     page_end=meta.get("page_end", page),
                     chunk_preview=doc.get("content", "")[:200],
@@ -138,10 +144,18 @@ class CitationExtractor:
 
         citations = []
         for citation, chunk, doc in rows:
+            # section_title is stored in chunk metadata_json (Qdrant mirror)
+            chunk_meta = chunk.metadata_json if hasattr(chunk, "metadata_json") else {}
+            section_title = (
+                chunk_meta.get("section_title")
+                if isinstance(chunk_meta, dict)
+                else None
+            )
             citations.append(
                 CitationResponse(
                     doc_id=chunk.document_id,
                     doc_title=doc.title,
+                    section_title=section_title,
                     page_start=chunk.page_start,
                     page_end=chunk.page_end,
                     chunk_preview=citation.snippet or chunk.content[:200],
@@ -168,11 +182,15 @@ class CitationExtractor:
             db: Database session
             message_id: Message identifier
             citations: CitationResponse objects from extract_citations
-            chunks_map: Mapping from extract_citations ("doc_id:page" -> chunk_id)
+            chunks_map: Mapping from extract_citations (chunk_id -> chunk_id)
         """
+        # chunks_map preserves insertion order (Python 3.7+) and was built
+        # in the same pass as citations, so index i in citations maps to
+        # index i in chunks_map.values(). This is O(1) per citation.
+        chunk_ids = list(chunks_map.values())
+
         for i, cit in enumerate(citations):
-            key = f"{cit.doc_id}:{cit.page_start}"
-            chunk_id = chunks_map.get(key)
+            chunk_id = chunk_ids[i] if i < len(chunk_ids) else None
 
             if not chunk_id:
                 # Skip citations we can't link to a chunk

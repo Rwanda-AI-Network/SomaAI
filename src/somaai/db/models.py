@@ -101,6 +101,32 @@ class Chunk(Base):
     message_citations = relationship("MessageCitation", back_populates="chunk")
 
 
+class Conversation(Base):
+    """Conversation container grouping related messages.
+
+    Each conversation belongs to a single actor and has a grade/subject scope.
+    """
+
+    __tablename__ = "conversations"
+
+    id = Column(String(36), primary_key=True)
+    actor_id = Column(String(64), nullable=False, index=True)
+    title = Column(String(255), default="New Chat")
+    grade = Column(String(10), nullable=False)
+    subject = Column(String(50), nullable=False, default="general")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    messages = relationship(
+        "Message", back_populates="conversation", cascade="all, delete-orphan",
+        order_by="Message.created_at",
+    )
+
+
 class Message(Base):
     """Chat message (query + response pair).
 
@@ -108,22 +134,28 @@ class Message(Base):
     """
 
     __tablename__ = "messages"
+    __table_args__ = (
+        Index("ix_messages_conversation_created", "conversation_id", "created_at"),
+    )
 
     id = Column(String(36), primary_key=True)
-    session_id = Column(String(36), nullable=True, index=True)
-    actor_id = Column(String(64), nullable=True, index=True)  # Actor ID for MVP
+    conversation_id = Column(
+        String(36), ForeignKey("conversations.id"), nullable=False, index=True
+    )
+    actor_id = Column(String(64), nullable=False, index=True)
     user_role = Column(String(20), nullable=False)
     question = Column(Text, nullable=False)
     answer = Column(Text, nullable=False)
     sufficiency = Column(String(20), nullable=False, default="sufficient")
     confidence = Column(Float, nullable=True)
     grade = Column(String(10), nullable=False, index=True)
-    subject = Column(String(50), nullable=False, index=True)
+    subject = Column(String(50), nullable=False, default="general", index=True)
     analogy = Column(Text, nullable=True)
     realworld_context = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
+    conversation = relationship("Conversation", back_populates="messages")
     citations = relationship(
         "MessageCitation", back_populates="message", cascade="all, delete-orphan"
     )

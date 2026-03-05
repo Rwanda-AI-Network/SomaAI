@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from somaai.contracts.common import GradeLevel, Subject
+
 from somaai.contracts.docs import (
     IngestJobResponse,
     IngestStorageRequest,
@@ -71,8 +71,8 @@ def validate_file(file: UploadFile) -> None:
 async def ingest_document(
     request: Request,
     file: UploadFile = File(..., description="Document file (PDF, DOCX)"),
-    grade: GradeLevel = Form(..., description="Grade level"),
-    subject: Subject = Form(..., description="Subject"),
+    grade: str = Form(..., description="Grade level"),
+    subject: str = Form(..., description="Subject"),
     title: str = Form(None, description="Document title (optional)"),
     db: AsyncSession = Depends(get_session),
 ):

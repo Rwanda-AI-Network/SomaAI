@@ -5,7 +5,7 @@ from enum import Enum
 
 from pydantic import BaseModel, Field, model_validator
 
-from somaai.contracts.common import DifficultyLevel, GradeLevel, Subject
+from somaai.contracts.common import DifficultyLevel
 
 
 class QuizStatus(str, Enum):
@@ -48,8 +48,8 @@ class QuizGenerateRequest(BaseModel):
         True, description="Include detailed answers with citations"
     )
     include_citations: bool = Field(True, description="Include citations in answers")
-    grade: GradeLevel = Field(..., description="Grade level")
-    subject: Subject = Field(..., description="Subject")
+    grade: str = Field(..., description="Grade level")
+    subject: str = Field(..., description="Subject")
 
     @model_validator(mode="after")
     def validate_flags(self):

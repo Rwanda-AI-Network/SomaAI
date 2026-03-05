@@ -23,30 +23,11 @@ class UserRole(str, Enum):
     TEACHER = "teacher"
 
 
-class GradeLevel(str, Enum):
-    """Rwanda education grade levels."""
+# NOTE: GradeLevel and Subject enums have been removed.
+# Grades and subjects are now DB-driven via the Grade/Subject tables,
+# validated at runtime through utils/validators.py and cached via MetaService.
+# This allows adding new curriculum data via DB insert instead of code deployment.
 
-    P6 = "P6"
-    S1 = "S1"
-    S2 = "S2"
-    S3 = "S3"
-    S4 = "S4"
-    S5 = "S5"
-    S6 = "S6"
-
-
-class Subject(str, Enum):
-    """Curriculum subjects."""
-
-    MATHEMATICS = "mathematics"
-    ENGLISH = "english"
-    KINYARWANDA = "kinyarwanda"
-    FRENCH = "french"
-    SCIENCE = "science"
-    SOCIAL_STUDIES = "social_studies"
-    ICT = "ict"
-    ENTREPRENEURSHIP = "entrepreneurship"
-    COMPUTER_SCIENCE = "computer_science"
 
 
 class PaginatedResponse(BaseModel, Generic[T]):

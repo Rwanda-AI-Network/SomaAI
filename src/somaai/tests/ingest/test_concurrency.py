@@ -76,7 +76,7 @@ async def test_concurrent_ingestion_deduplication():
                 doc_id=doc_id,
                 file_path=file_path,
                 grade="S1",
-                subject="math",
+                subject="mathematics",
                 skip_if_exists=True,
             )
             for _ in range(3)

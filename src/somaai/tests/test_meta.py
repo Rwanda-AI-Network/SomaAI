@@ -412,23 +412,23 @@ class TestMetaCache:
 
     def test_cache_stores_and_retrieves(self):
         """_set_cached stores; _get_cached retrieves before expiry."""
-        _set_cached("test_key", [1, 2, 3])
-        assert _get_cached("test_key") == [1, 2, 3]
+        _run(_set_cached("test_key", [1, 2, 3]))
+        assert _run(_get_cached("test_key")) == [1, 2, 3]
 
     def test_cache_returns_none_after_expiry(self):
         """Expired entries return None."""
         # Manually insert with an already-expired timestamp
         _cache["expired"] = (time.monotonic() - 1, "stale")
-        assert _get_cached("expired") is None
+        assert _run(_get_cached("expired")) is None
         assert "expired" not in _cache  # Cleaned up
 
     def test_invalidate_clears_all(self):
         """invalidate_meta_cache removes all entries."""
-        _set_cached("a", 1)
-        _set_cached("b", 2)
+        _run(_set_cached("a", 1))
+        _run(_set_cached("b", 2))
         invalidate_meta_cache()
-        assert _get_cached("a") is None
-        assert _get_cached("b") is None
+        assert _run(_get_cached("a")) is None
+        assert _run(_get_cached("b")) is None
 
     def test_cache_ttl_is_5_minutes(self):
         """CACHE_TTL should be 300 seconds."""
@@ -439,7 +439,7 @@ class TestMetaCache:
         _run(_seed_grades())
         # First call — populates cache
         data1 = client.get("/api/v1/meta/grades").json()
-        assert _get_cached("grades:only_docs=False") is not None
+        assert _run(_get_cached("grades:only_docs=False")) is not None
 
         # Second call — should use cache
         data2 = client.get("/api/v1/meta/grades").json()
@@ -452,10 +452,10 @@ class TestMetaCache:
         client.get("/api/v1/meta/subjects?grade=S1")
         client.get("/api/v1/meta/subjects?grade=S2")
 
-        assert _get_cached("subjects:grade=S1:only_docs=False") is not None
-        assert _get_cached("subjects:grade=S2:only_docs=False") is not None
-        cached_s1 = _get_cached("subjects:grade=S1:only_docs=False")
-        cached_s2 = _get_cached("subjects:grade=S2:only_docs=False")
+        assert _run(_get_cached("subjects:grade=S1:only_docs=False")) is not None
+        assert _run(_get_cached("subjects:grade=S2:only_docs=False")) is not None
+        cached_s1 = _run(_get_cached("subjects:grade=S1:only_docs=False"))
+        cached_s2 = _run(_get_cached("subjects:grade=S2:only_docs=False"))
         assert cached_s1 is not cached_s2
         _run(_cleanup_all())
 
@@ -463,5 +463,5 @@ class TestMetaCache:
         """Subjects without grade uses 'subjects:all' cache key."""
         _run(_seed_subjects())
         client.get("/api/v1/meta/subjects")
-        assert _get_cached("subjects:grade=None:only_docs=False") is not None
+        assert _run(_get_cached("subjects:grade=None:only_docs=False")) is not None
         _run(_cleanup_all())
