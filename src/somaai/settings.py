@@ -117,7 +117,7 @@ class Settings(BaseSettings):
 
     # Rate Limits (slowapi format)
     rate_limit_ask: str = "20/hour"
-    rate_limit_create_conversation: str = "5/hour"
+    rate_limit_create_conversation: str = "10/hour"
 
 
 settings = Settings()
