@@ -55,7 +55,7 @@ mindmap
 |---------|--------|---------------|
 | BM25 sparse index | 🔧 Built | `Retriever` never calls it. Config flags not in `settings.py`. |
 | Cross-encoder reranker | 🔧 Built | Pipeline never calls it. Config flag not in `settings.py`. |
-| Subject filter | 🔧 Built | Hardcoded `subject=None` in `retriever.py`. |
+| Subject filtering | ✅ Working | Standardized `"general"` default across DB and API. |
 | OpenAI LLM provider | 🔧 Stub | Raises `NotImplementedError`. |
 | HuggingFace LLM provider | 🔧 Stub | Raises `NotImplementedError`. |
 | Google Drive storage | 🔧 Stub | Settings defined but not implemented. |
@@ -69,7 +69,7 @@ mindmap
 
 These directly affect answer accuracy.
 
-1. **Activate subject filtering** — Remove the `subject=None` override in `retriever.py`, validate metadata alignment with frontend subject names
+1. [x] **Activate subject filtering** [DONE] — Standardized `"general"` default and enabled real filtering in `retriever.py`.
 2. **Integrate BM25 hybrid search** — Wire `BM25Index` into `Retriever`, add `rag_enable_hybrid_search` and `rag_hybrid_alpha` to `Settings`
 3. **Activate cross-encoder reranker** — Wire reranker into pipeline, add `rag_enable_reranking` to `Settings`, benchmark latency impact
 4. **Build evaluation framework** — Ground-truth dataset of Q&A pairs, measure Recall@K, MRR, answer quality

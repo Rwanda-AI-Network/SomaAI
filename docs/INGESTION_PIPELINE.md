@@ -103,7 +103,7 @@ Filtered chunks are logged and discarded.
 | `doc_id` | Caller-provided | Document grouping |
 | `file_hash` | Stage 1 (SHA-256) | Deduplication |
 | `grade` | Caller-provided (e.g., `"S2"`) | Retrieval filtering |
-| `subject` | Caller-provided (e.g., `"biology"`) | Retrieval filtering (currently disabled) |
+| `subject` | Caller-provided (e.g., `"biology"`) | Retrieval filtering |
 | `page_start` | Extraction stage | Citations |
 | `page_end` | Extraction stage | Citations |
 | `section_title` | Chunking stage | Context injection |
@@ -176,4 +176,4 @@ curl http://localhost:8000/api/v1/ingest/jobs/{job_id}
 2. **Sequential stages** — no parallelism between extraction and chunking
 3. **Hardcoded parameters** — chunk size, overlap, quality thresholds, batch size are in `_build_pipeline()`, not configurable via `.env`
 4. **No incremental updates** — updating one page requires re-ingesting the entire PDF
-5. **Subject filter unused** — subject metadata is stored but the retriever does not filter by it
+5. **Limited parallelism** — no parallel processing of document chunks within a single document

@@ -10,17 +10,18 @@ RAG-powered educational assistant for Rwandan students and teachers. Transforms 
 
 ```mermaid
 graph LR
-    Client["Client"] -->|POST /chat/ask| API["FastAPI<br/>Gateway"]
-    API --> RAG["RAG Pipeline"]
+    Client["Client"] -->|POST /conversations| API["FastAPI<br/>Gateway"]
+    API -->|Ask| Service["Chat<br/>Service"]
+    Service --> RAG["RAG Pipeline"]
     RAG --> Q["Qdrant<br/>Vectors"]
     RAG --> LLM["Groq<br/>Llama 3.2"]
     RAG --> Cache["Redis<br/>Cache"]
-    API --- PG["PostgreSQL<br/>Metadata"]
+    API --- PG["PostgreSQL<br/>Session/History"]
     Ingest["Ingestion<br/>Pipeline"] --> Q
     Ingest --> PG
 ```
 
-**How it works**: Curriculum PDFs are ingested through a 7-stage pipeline (extract → chunk → embed → store). Student/teacher queries hit the RAG pipeline, which classifies, retrieves, generates, and validates citations.
+**How it works**: Curriculum PDFs are ingested through a 7-stage pipeline (extract → chunk → embed → store). All queries are tracked within a **Conversation** context, allowing for follow-up questions and token-aware history management. The RAG pipeline classifies, retrieves, generates, and validates citations for every turn.
 
 ---
 
@@ -45,6 +46,7 @@ App runs at http://localhost:8000 · Swagger at http://localhost:8000/docs
 |----------|-------------|
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, module breakdown, data flow, request lifecycles |
 | [INGESTION_PIPELINE.md](docs/INGESTION_PIPELINE.md) | 7-stage ingestion: extract → chunk → embed → store |
+| [FRONTEND_INTEGRATION.md](docs/FRONTEND_INTEGRATION.md) | Guide for Chat UI: sessions, state, and API sequences |
 | [RETRIEVAL.md](docs/RETRIEVAL.md) | Dense retrieval, fallback strategy, reranker/BM25 status |
 | [DEVELOPMENT.md](docs/DEVELOPMENT.md) | Local setup, environment variables, debugging, testing |
 | [ROADMAP.md](docs/ROADMAP.md) | MVP status, prioritized improvements |
@@ -61,15 +63,12 @@ App runs at http://localhost:8000 · Swagger at http://localhost:8000/docs
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/v1/chat/ask` | POST | Ask a question (returns AI answer + citations) |
-| `/api/v1/chat/messages/{id}` | GET | Get message details |
-| `/api/v1/chat/messages/{id}/citations` | GET | Get source citations |
-| `/api/v1/ingest` | POST | Upload and ingest a document |
-| `/api/v1/ingest/jobs/{id}` | GET | Check ingestion job status |
-| `/api/v1/quiz` | POST | Generate a quiz |
-| `/api/v1/meta` | GET | Grades, subjects, topics (curriculum metadata) |
-| `/api/v1/teacher` | CRUD | Teacher profile management |
-| `/api/v1/feedback` | POST | Submit response rating |
+| `/api/v1/chat/conversations` | POST | Create a new conversation (sets grade/subject) |
+| `/api/v1/chat/conversations/{id}/ask` | POST | Ask a question within a conversation |
+| `/api/v1/chat/conversations` | GET | List user's conversations |
+| `/api/v1/chat/messages/{id}` | GET | Get message details + citations |
+| `/api/v1/ingest` | POST | Upload and ingest curriculum PDF |
+| `/api/v1/meta` | GET | Curriculum metadata (grades, subjects) |
 | `/api/v1/docs/{id}/view` | GET | View document page |
 
 ---

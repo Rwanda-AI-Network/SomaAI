@@ -141,15 +141,16 @@ FastAPI with Pydantic contracts. Active endpoints:
 
 | Endpoint Group | Prefix | Key Routes |
 |---------------|--------|------------|
-| Chat | `/chat` | `POST /ask` (201), `GET /messages/{id}`, `GET /messages/{id}/citations` |
+| Chat | `/chat` | `POST /conversations` (Create), `POST /conversations/{id}/ask` (RAG), `GET /messages/{id}` (Details) |
 | Ingest | `/ingest` | `POST /` (upload + background job), `GET /jobs/{id}` |
 | Quiz | `/quiz` | Quiz generation and download |
 | Meta | `/meta` | Grades, subjects, topics (in-process TTL cache) |
 | Teacher | `/teacher` | Profile management |
 | Feedback | `/feedback` | Response ratings |
-| Actors | `/actors` | Anonymous user management |
 | Docs | `/docs` | Document viewing |
 | Chunked Upload | `/chunked-upload` | Large file support |
+
+> **Note**: The legacy `/actors` endpoint has been removed; identity is now managed via `SessionMiddleware`.
 
 > **Note**: The `/retrieval` endpoint exists in code but is **commented out** in the router.
 
@@ -186,7 +187,7 @@ Adapter layer for swappable backends:
 
 ## Request Lifecycle
 
-### Chat Request (`POST /api/v1/chat/ask`)
+### Chat Request (`POST /api/v1/chat/conversations/{id}/ask`)
 
 ```mermaid
 sequenceDiagram
@@ -200,11 +201,11 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant RC as Redis Cache
 
-    C->>F: POST /chat/ask (201)
+    C->>F: POST /chat/conversations/{id}/ask (201)
     F->>F: Sanitize input, 30s timeout
     F->>CS: ask(data, actor_id)
-    CS->>CS: Resolve preferences (student/teacher)
-    CS->>CS: Load history (last 6 turns)
+    CS->>CS: Ownership check (ConversationService)
+    CS->>CS: Load history via ContextBuilder (token-aware)
     CS->>P: run(query, grade, subject, ...)
     P->>RC: Check response cache
     alt Cache hit
@@ -212,9 +213,8 @@ sequenceDiagram
     else Cache miss
         P->>P: Sanitize query
         P->>P: Classify (chitchat vs curriculum)
-        P->>P: Condense with history (if exists)
         P->>R: retrieve_for_context()
-        R->>Q: Search with grade filter
+        R->>Q: Search with grade AND subject filters
         alt < 3 results
             R->>Q: Retry without filters
         end
@@ -300,7 +300,7 @@ Prometheus metrics are optional — if `prometheus_client` is not installed, no-
 | **BM25 not integrated** | `BM25Index` exists with full persistence and deferred rebuild, but is never called from `Retriever`. Config flags (`RAG_ENABLE_HYBRID_SEARCH`, `RAG_HYBRID_ALPHA`) exist in `.env.example` but are **not defined in `settings.py`** and not checked by any pipeline code. |
 | **Reranker not active** | Cross-encoder reranker is implemented but `RAG_ENABLE_RERANKING` is not a defined setting — only accessed via `getattr` in monitoring. The pipeline never calls the reranker. |
 | **HyDE not implemented** | `RAG_ENABLE_HYDE` appears in `.env.example` and monitoring but there is no HyDE implementation in the RAG pipeline code. |
-| **Subject filter disabled** | `Retriever.retrieve()` hardcodes `subject=None` (line 110 of `retriever.py`). Only grade filtering is active. |
+| **Subject filter active** | `subject` is now mandatory in the RAG pipeline and defaults to `"general"`. Filtering is enforced in both PostgreSQL and Qdrant. |
 | **OpenAI/HuggingFace LLM stubs** | Both providers raise `NotImplementedError`. Only `groq` and `mock` backends are functional. |
 | **No evaluation metrics** | No Recall@K, MRR, or ground-truth dataset exists. |
 | **Mock LLM restricted** | `factory.py` blocks `LLM_BACKEND=mock` unless `TESTING=1` is set. |

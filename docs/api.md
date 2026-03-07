@@ -13,10 +13,13 @@
 - `GET /health` - Health check (Redis, DB, VectorStore status)
 - `GET /metrics` - Prometheus metrics (latency, counters)
 
-### Chat
-- `POST /chat/ask` - Send a RAG-enhanced question (Student/Teacher)
-- `GET /chat/messages/{id}` - Get full message details with citations
-- `GET /chat/history` - Get conversation history
+### Chat & Conversations
+- `POST /api/v1/chat/conversations` - Create a new conversation. Returns `ConversationResponse`.
+- `GET /api/v1/chat/conversations` - List actor's conversations (most recent first).
+- `POST /api/v1/chat/conversations/{id}/ask` - Ask a question within a conversation.
+  - **Payload:** Requires `question`, `grade` (e.g., "S1"), and `subject` (defaults to `"general"`).
+- `GET /api/v1/chat/messages/{id}` - Get full message details with citations and RAG metadata.
+- `GET /api/v1/chat/messages/{id}/citations` - Get granular source citations for a specific message.
 
 ### Ingest
 - `POST /ingest` - Ingest document (PDF/DOCX). Rate Limited: 10/min.
