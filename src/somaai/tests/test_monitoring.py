@@ -4,7 +4,7 @@ Validates that Prometheus metrics are correctly registered, incremented,
 and that the module degrades gracefully when prometheus_client is absent.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -14,12 +14,7 @@ class TestLogRagRequest:
 
     def test_success_increments_counters(self):
         """log_rag_request should increment Prometheus counters on success."""
-        from somaai.monitoring import (
-            log_rag_request,
-            rag_confidence_score,
-            rag_requests_total,
-            rag_sufficiency_total,
-        )
+        from somaai.monitoring import log_rag_request
 
         # These are real prometheus_client objects or no-op stubs —
         # either way calling them should not raise.
