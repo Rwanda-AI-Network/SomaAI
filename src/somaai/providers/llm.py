@@ -115,19 +115,19 @@ def get_llm(settings: Settings, fallback_to_mock: bool = False) -> LLMClient:
         return MockLLMProvider()
 
     try:
-        if backend == "openai":
-            if not settings.openai_api_key:
-                raise ValueError(
-                    "SOMAAI_OPENAI_API_KEY is required for OpenAI backend"
-                )
-            if not settings.openai_model:
-                raise ValueError(
-                    "SOMAAI_OPENAI_MODEL is required for OpenAI backend"
-                )
-            return OpenAILLMProvider(
-                api_key=settings.openai_api_key.get_secret_value(),
-                model=settings.openai_model,
-            )
+        # if backend == "openai":
+        #     if not settings.openai_api_key:
+        #         raise ValueError(
+        #             "SOMAAI_OPENAI_API_KEY is required for OpenAI backend"
+        #         )
+        #     if not settings.openai_model:
+        #         raise ValueError(
+        #             "SOMAAI_OPENAI_MODEL is required for OpenAI backend"
+        #         )
+        #     return OpenAILLMProvider(
+        #         api_key=settings.openai_api_key.get_secret_value(),
+        #         model=settings.openai_model,
+        #     )
 
         if backend == "groq":
             if not settings.groq_api_key:
@@ -141,10 +141,10 @@ def get_llm(settings: Settings, fallback_to_mock: bool = False) -> LLMClient:
                 model=settings.groq_model,
             )
 
-        if backend == "huggingface":
-            raise NotImplementedError("HuggingFace backend not implemented yet")
+        # if backend == "huggingface":
+        #     raise NotImplementedError("HuggingFace backend not implemented yet")
 
-        raise ValueError(f"Unknown LLM_BACKEND: {backend}")
+        # raise ValueError(f"Unknown LLM_BACKEND: {backend}")
 
     except (ValueError, NotImplementedError) as e:
         if fallback_to_mock:

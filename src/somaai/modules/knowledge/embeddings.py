@@ -67,19 +67,19 @@ def get_embeddings(settings: Settings) -> ThreadSafeEmbeddings:
     """
     global _EMBEDDINGS_MODEL
     if _EMBEDDINGS_MODEL is None:
-        if settings.openai_api_key:
-            logger.info("Creating OpenAI embeddings model")
-            inner = OpenAIEmbeddings(
-                api_key=settings.openai_api_key.get_secret_value(),
-                model="text-embedding-3-small",
-            )
-        else:
-            logger.info("Creating HuggingFace embeddings model (local)")
-            inner = HuggingFaceEmbeddings(
-                model_name="all-MiniLM-L6-v2",
-                model_kwargs={"device": "cpu"},
-                encode_kwargs={"normalize_embeddings": True},
-            )
+        # if settings.openai_api_key:
+        #     logger.info("Creating OpenAI embeddings model")
+        #     inner = OpenAIEmbeddings(
+        #         api_key=settings.openai_api_key.get_secret_value(),
+        #         model="text-embedding-3-small",
+        #     )
+        # else:
+        logger.info("Creating HuggingFace embeddings model (local)")
+        inner = HuggingFaceEmbeddings(
+            model_name="all-MiniLM-L6-v2",
+            model_kwargs={"device": "cpu"},
+            encode_kwargs={"normalize_embeddings": True},
+        )
         _EMBEDDINGS_MODEL = ThreadSafeEmbeddings(inner)
     return _EMBEDDINGS_MODEL
 

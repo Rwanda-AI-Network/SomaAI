@@ -1,4 +1,4 @@
-.PHONY: help install dev lint test run clean docker docker-stop
+.PHONY: help install dev lint test run clean docker docker-stop docker-monitoring
 
 help:
 	@echo "Available commands:"
@@ -10,6 +10,7 @@ help:
 	@echo "  make clean       - Clean up build artifacts"
 	@echo "  make docker      - Run with Docker"
 	@echo "  make docker-stop - Stop Docker containers"
+	@echo "  make docker-monitoring - Run with Docker + Prometheus + Grafana"
 	@echo "  make seed        - Seed meta data"
 	@echo "  make seed-meta   - Seed meta data"
 
@@ -36,14 +37,16 @@ clean:
 	rm -rf .pytest_cache .coverage htmlcov dist build *.egg-info .ruff_cache
 
 docker:
-	docker-compose -f docker/docker-compose.yml up --build
+	docker compose -f docker/docker-compose.yml up --build
+
+docker-monitoring:
+	docker compose -f docker/docker-compose.yml --profile monitoring up --build
 
 docker-stop:
-	docker-compose -f docker/docker-compose.yml down
+	docker compose -f docker/docker-compose.yml --profile monitoring down
 
 seed-meta:
 	PYTHONPATH=src .venv/bin/python -m scripts.seed_meta
 
 seed:
 	make seed-meta
-

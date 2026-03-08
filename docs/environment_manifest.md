@@ -58,9 +58,8 @@ The "Brain" for our RAG (Retrieval Augmented Generation) pipeline.
 ### 6. AI & LLM Connectivity
 | Variable | Default | Role |
 | :--- | :--- | :--- |
-| `SOMAAI_LLM_BACKEND` | `groq` | Strategy selector for LLM intelligence (`groq` / `openai` / `mock`). |
+| `SOMAAI_LLM_BACKEND` | `groq` | Strategy selector for LLM intelligence (`groq` / `mock`). |
 | `SOMAAI_GROQ_API_KEY` | `None` | **[SECRET]** Token for Groq's high-performance inference. |
-| `SOMAAI_OPENAI_API_KEY`| `None` | **[SECRET]** Token for OpenAI backend fallback. |
 
 ---
 

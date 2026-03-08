@@ -1,12 +1,5 @@
 Phase 0: Foundation (Day 1)
 
-Step 2: Docker Compose
-Two compose files:
-
-docker-compose.yml — dev (SQLite, no MinIO, no monitoring)
-docker-compose.prod.yml — production (PostgreSQL, MinIO, Redis, Qdrant, Prometheus, Grafana)
-Why? Because right now your single docker-compose.yml spins up 7 containers just to run in dev. That's slow and overkill. In dev, you should be able to run make dev and have the app start with just SQLite and a local Qdrant. No Redis, no MinIO, no Prometheus.
-
 Step 3: Database Models
 I'd create exactly 3 tables to start:
 

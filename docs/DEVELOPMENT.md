@@ -108,10 +108,6 @@ All configuration is loaded from `.env` via `pydantic-settings`. See `src/somaai
 | `LLM_BACKEND` | `groq` | ✅ | `groq` (functional), `mock` (tests only), `openai` / `huggingface` (stubs) |
 | `GROQ_API_KEY` | _(none)_ | ✅ | Required when `LLM_BACKEND=groq` |
 | `GROQ_MODEL` | `llama3.2` | ✅ | Groq model name. Groq provider uses JSON mode (`response_format`). |
-| `OPENAI_API_KEY` | _(none)_ | ✅ | Sets embedding model to OpenAI. **LLM provider raises `NotImplementedError`**. |
-| `OPENAI_MODEL` | _(none)_ | ✅ | Not functional for LLM generation. |
-| `HUGGINGFACE_API_KEY` | _(none)_ | ✅ | Present in settings. **LLM provider raises `NotImplementedError`**. |
-| `HUGGINGFACE_MODEL` | _(none)_ | ✅ | Not functional. |
 
 > [!WARNING]
 > **Mock LLM restriction**: `factory.py` raises `RuntimeError` if `LLM_BACKEND=mock` is used without `TESTING=1`. For local dev without API keys, set both:

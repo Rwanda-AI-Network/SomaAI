@@ -45,8 +45,8 @@ Queries are embedded using the same model as ingestion:
 
 | Condition | Model | Dimensions |
 |-----------|-------|------------|
-| No `OPENAI_API_KEY` | `all-MiniLM-L6-v2` | 384 |
-| `OPENAI_API_KEY` set | `text-embedding-3-small` | Variable |
+| No `all-MiniLM-L6-v2` | `all-MiniLM-L6-v2` | 384 |
+| `all-MiniLM-L6-v2`  set | `all-MiniLM-L6-v2` | 384 |
 
 The singleton is managed by `get_embeddings()` in `modules/knowledge/embeddings.py`.
 
