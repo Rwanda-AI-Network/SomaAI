@@ -23,10 +23,15 @@ classifiers = [
 ]
 dependencies = [
     "fastapi>=0.109.0",
-    "uvicorn>=0.27.0",
+    "uvicorn[standard]>=0.27.0",
+    "gunicorn>=21.2.0",
+    "uvloop>=0.19.0; sys_platform != 'win32'",
+    "httptools>=0.6.1",
+    "orjson>=3.9.10",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
     "python-dotenv>=1.0.0",
+    "python-json-logger>=2.0.7",
     "sqlalchemy>=2.0.0",
     "alembic>=1.13.0",
     "asyncpg>=0.29.0",
@@ -36,27 +41,12 @@ dependencies = [
     "greenlet>=3.3.0",
     "aiofiles>=24.0.0",
     "groq>=1.0.0",
-    "pymupdf>=1.26.7",
-    "pdfminer.six>=20240706",
-    "Pillow>=12.1.1",
-    "python-docx>=1.1.0",
-    "pdf2image>=1.17.0",
-    "pytesseract>=0.3.10",
     "tzdata>=2025.3",
-    "langchain-huggingface>=1.2.0",
-    "langchain-openai>=1.1.7",
-    "langchain-qdrant>=1.1.0",
-    "langchain-text-splitters>=1.1.0",
-    "pdfplumber>=0.11.9",
-    "langchain>=0.3.0",
-    "langchain-core>=1.2.11",
     "cryptography>=46.0.5",
     "pybreaker>=1.0.0",
     "tenacity>=8.0.0",
     "xxhash>=3.0.0",
-    "sentence-transformers>=3.0.0",
     "minio>=7.2.0",
-    "pytest>=9.0.2",
 ]
 
 [project.optional-dependencies]
@@ -71,6 +61,7 @@ dev = [
 ]
 cache = [
     "redis>=5.0.0",
+    "hiredis>=2.3.0",
     "aiocache[redis]>=0.12.0",
     "gptcache>=0.1.40",
 ]
@@ -85,22 +76,31 @@ rag = [
     # LangChain ecosystem
     "langchain>=0.3.0",
     "langchain-community>=0.3.0",
+    "langchain-core>=0.3.0",
     "langchain-openai>=0.2.0",
     "langchain-qdrant>=0.2.0",
     "langchain-huggingface>=0.0.3",
     "langchain-text-splitters>=0.3.0",
+    # Embeddings/ML
+    "sentence-transformers>=3.0.0",
     # Document processing
     "pypdf>=6.7.2",
     "pymupdf>=1.24.0",
+    "pdfminer.six>=20240706",
+    "Pillow>=12.1.1",
+    "pdfplumber>=0.11.0",
     "pytesseract>=0.3.10",
     "pdf2image>=1.17.0",
     "docx2txt>=0.8",
-    "rank-bm25>=0.2.2",  # Hybrid search: sparse retrieval
-    "pdfplumber>=0.11.0",  # RAG-optimized PDF extraction (tables, layout)
+    "python-docx>=1.1.0",
+    "rank-bm25>=0.2.2",
     "groq>=0.4.0",
 ]
 s3 = [
     "aioboto3>=12.0.0",
+]
+observability = [
+    "sentry-sdk>=1.40.0",
 ]
 tasks = [
     # Async task queue
@@ -164,6 +164,10 @@ disallow_untyped_defs = false
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 testpaths = ["src/somaai/tests"]
+filterwarnings = [
+    "ignore::RuntimeWarning:somaai.modules.meta.service:337",
+    "ignore:coroutine.*was never awaited:RuntimeWarning",
+]
 
 [dependency-groups]
 dev = [

@@ -11,35 +11,79 @@ from fastapi.testclient import TestClient
 
 from somaai.app import create_app
 
+
 @pytest.fixture(scope="function", autouse=True)
 def _seed_test_metadata(request):
     """Seed baseline metadata for all tests except meta tests."""
-    if "test_meta.py" in str(request.node.fspath):
+    # Exclude all meta-related tests from auto-seeding to ensure isolation
+    if "test_meta" in str(request.node.fspath):
         yield
         return
 
     import asyncio
+
+    from sqlalchemy.exc import IntegrityError
+
     from somaai.db.models import Grade, Subject
     from somaai.db.session import async_session_maker
-    from sqlalchemy.exc import IntegrityError
 
     async def _seed():
         from somaai.db.session import init_db
+
         await init_db()
-        from sqlalchemy import select, func
         async with async_session_maker() as db:
             # Comprehensive grades for all tests
-            for g_id in ["P1", "P2", "P3", "P4", "P5", "P6", "S1", "S2", "S3", "S4", "S5", "S6"]:
+            for g_id in [
+                "P1",
+                "P2",
+                "P3",
+                "P4",
+                "P5",
+                "P6",
+                "S1",
+                "S2",
+                "S3",
+                "S4",
+                "S5",
+                "S6",
+            ]:
                 try:
-                    await db.merge(Grade(id=g_id, name=f"Grade {g_id}", level="primary" if g_id.startswith("P") else "secondary", display_order=1))
+                    await db.merge(
+                        Grade(
+                            id=g_id,
+                            name=f"Grade {g_id}",
+                            level="primary" if g_id.startswith("P") else "secondary",
+                            display_order=1,
+                        )
+                    )
                     await db.commit()
                 except IntegrityError:
                     await db.rollback()
-            
+
             # Comprehensive subjects for all tests
-            for s_id in ["general", "science", "math", "mathematics", "biology", "chemistry", "physics", "english", "social_studies", "geography", "history", "economics", "computer_science"]:
+            for s_id in [
+                "general",
+                "science",
+                "math",
+                "mathematics",
+                "biology",
+                "chemistry",
+                "physics",
+                "english",
+                "social_studies",
+                "geography",
+                "history",
+                "economics",
+                "computer_science",
+            ]:
                 try:
-                    await db.merge(Subject(id=s_id, name=s_id.replace("_", " ").title(), display_order=1))
+                    await db.merge(
+                        Subject(
+                            id=s_id,
+                            name=s_id.replace("_", " ").title(),
+                            display_order=1,
+                        )
+                    )
                     await db.commit()
                 except IntegrityError:
                     await db.rollback()
@@ -86,9 +130,10 @@ def client():
 
     Session middleware runs in-memory mode (no Redis) automatically.
     """
+    from unittest.mock import AsyncMock, MagicMock, patch
+
     from somaai.deps import get_settings
     from somaai.settings import Settings
-    from unittest.mock import AsyncMock, MagicMock, patch
 
     app = create_app()
 
@@ -99,17 +144,32 @@ def client():
 
     # Patch where it is defined, not where it is imported locally
     with (
-        patch(
-            "somaai.modules.knowledge.stores.qdrant.QdrantStore"
-        ) as mock_store_cls,
+        patch("somaai.modules.knowledge.stores.qdrant.QdrantStore") as mock_store_cls,
         patch(
             "somaai.modules.rag.retriever.Retriever.retrieve",
             new_callable=AsyncMock,
         ) as mock_retrieve,
-        patch(
-            "somaai.health.get_qdrant_client"
-        ) as mock_qdrant_client_func,
+        patch("somaai.utils.redis.get_cache_redis", new_callable=AsyncMock) as mock_redis_cache,
+        patch("somaai.utils.redis.get_general_redis", new_callable=AsyncMock) as mock_redis_gen,
+        patch("somaai.utils.redis.get_jobs_redis", new_callable=AsyncMock) as mock_redis_jobs,
+        patch("somaai.health.get_qdrant_client") as mock_qdrant_client_func,
     ):
+        # Setup Redis mock behavior (mimic empty/down Redis for most tests)
+        async def _async_iter_empty():
+            """Empty async iterator for scan_iter mock."""
+            if False:  # Never execute, just make it an async generator
+                yield
+        
+        for m in [mock_redis_cache, mock_redis_gen, mock_redis_jobs]:
+            redis_inst = AsyncMock()
+            redis_inst.get.return_value = None
+            redis_inst.setex.return_value = True
+            redis_inst.delete.return_value = True
+            # scan_iter should return an async iterator
+            redis_inst.scan_iter.return_value = _async_iter_empty()
+            # Make the mock return the redis_inst directly (not wrapped in another coroutine)
+            m.return_value = redis_inst
+
         mock_store = MagicMock()
         mock_store.add.return_value = True
         mock_store_cls.return_value = mock_store

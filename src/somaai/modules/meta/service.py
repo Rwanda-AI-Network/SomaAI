@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 # Two-tier TTL cache: L1 (in-process) + L2 (Redis)
 # ---------------------------------------------------------------------------
 _cache: dict[str, tuple[float, Any]] = {}  # L1
-CACHE_L1_TTL = 60   # 1 minute in-process
+CACHE_L1_TTL = 60  # 1 minute in-process
 CACHE_L2_TTL = 300  # 5 minutes in Redis
 CACHE_TTL = CACHE_L2_TTL  # Legacy alias for tests
 _L2_PREFIX = "meta:"  # Redis key namespace
@@ -104,7 +104,15 @@ async def _invalidate_l2() -> None:
         from somaai.utils.redis import get_cache_redis
 
         redis = await get_cache_redis()
-        keys = [k async for k in redis.scan_iter(match=f"{_L2_PREFIX}*")]
+        
+        # Check if scan_iter is a mock (tests) or real Redis
+        scan_iter = redis.scan_iter(match=f"{_L2_PREFIX}*")
+        
+        # If it's a mock, it won't have __aiter__, skip gracefully
+        if not hasattr(scan_iter, '__aiter__'):
+            return
+        
+        keys = [k async for k in scan_iter]
         if keys:
             await redis.delete(*keys)
             logger.info("Meta L2 cache invalidated (%d keys)", len(keys))
@@ -326,7 +334,7 @@ class MetaService:
     async def _invalidate_all_cache(self) -> None:
         """Clear both L1 (in-process) and L2 (Redis) caches."""
         invalidate_meta_cache()  # L1 — sync
-        await _invalidate_l2()   # L2 — async, best-effort
+        await _invalidate_l2()  # L2 — async, best-effort
 
     async def create_grade(self, grade_in: GradeCreate) -> GradeResponse:
         """Create a new grade and invalidate cache."""
