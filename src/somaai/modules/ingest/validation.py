@@ -279,45 +279,39 @@ class StorageValidator:
 
         try:
             # Import here to avoid circular dependencies
-            from somaai.modules.rag.retriever import Retriever
+            from somaai.modules.knowledge.stores.qdrant import QdrantStore
             from somaai.settings import settings
 
-            retriever = Retriever(settings)
+            store = QdrantStore(settings)
 
-            # Test 1: Can we retrieve anything from this document?
-            results = await retriever.retrieve(query="test", top_k=1)
+            # Test 1: Can we find chunks for this specific document?
+            exists = await store.exists_by_doc_id(doc_id)
 
-            if not results:
+            if not exists:
                 issues.append(
                     ValidationIssue(
                         severity="critical",
-                        message=f"Cannot retrieve any chunks for doc_id={doc_id}",
+                        message=f"Cannot find any chunks for doc_id={doc_id}",
                         suggestion="Check Qdrant storage and embedding generation",
                     )
                 )
             else:
-                # Test 2: Metadata integrity
-                chunk = results[0]
-                if not chunk.metadata.get("chunk_id"):
-                    issues.append(
-                        ValidationIssue(
-                            severity="warning",
-                            message="Retrieved chunk missing chunk_id metadata",
-                            suggestion="Verify metadata pipeline",
-                        )
-                    )
+                # Test 2: Retrieve a sample and check metadata integrity
+                results = await store.search(
+                    query="test",
+                    top_k=1,
+                )
 
-                if chunk.metadata.get("doc_id") != doc_id:
-                    issues.append(
-                        ValidationIssue(
-                            severity="critical",
-                            message=(
-                                f"doc_id mismatch: expected {doc_id}, "
-                                f"got {chunk.metadata.get('doc_id')}"
-                            ),
-                            suggestion="Check metadata assignment in pipeline",
+                if results:
+                    chunk = results[0]
+                    if not chunk["metadata"].get("chunk_id"):
+                        issues.append(
+                            ValidationIssue(
+                                severity="warning",
+                                message="Retrieved chunk missing chunk_id metadata",
+                                suggestion="Verify metadata pipeline",
+                            )
                         )
-                    )
 
         except Exception as e:
             issues.append(
