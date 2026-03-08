@@ -1,65 +1,68 @@
+"""Seed curriculum metadata (grades + subjects).
+
+Run with: make seed
+"""
+
 import asyncio
+import uuid
 
 from sqlalchemy import select
 
-from somaai.db.models import Grade, Subject
+from somaai.db.models import CurriculumMetadata
 from somaai.db.session import async_session_maker
 
-GRADES = [
-    {"id": "P6", "name": "Primary 6", "level": "primary", "display_order": 6},
-    {"id": "S1", "name": "Senior 1", "level": "secondary", "display_order": 7},
-    {"id": "S2", "name": "Senior 2", "level": "secondary", "display_order": 8},
-    {"id": "S3", "name": "Senior 3", "level": "secondary", "display_order": 9},
-    {"id": "S4", "name": "Senior 4", "level": "secondary", "display_order": 10},
-    {"id": "S5", "name": "Senior 5", "level": "secondary", "display_order": 11},
-    {"id": "S6", "name": "Senior 6", "level": "secondary", "display_order": 12},
+METADATA = [
+    # Grades
+    {"type": "grade", "key": "P6", "name": "Primary 6", "display_order": 6},
+    {"type": "grade", "key": "S1", "name": "Senior 1", "display_order": 7},
+    {"type": "grade", "key": "S2", "name": "Senior 2", "display_order": 8},
+    {"type": "grade", "key": "S3", "name": "Senior 3", "display_order": 9},
+    {"type": "grade", "key": "S4", "name": "Senior 4", "display_order": 10},
+    {"type": "grade", "key": "S5", "name": "Senior 5", "display_order": 11},
+    {"type": "grade", "key": "S6", "name": "Senior 6", "display_order": 12},
+    # Subjects
+    {"type": "subject", "key": "computer_science", "name": "Computer Science", "display_order": 1},
+    {"type": "subject", "key": "mathematics", "name": "Mathematics", "display_order": 2},
+    {"type": "subject", "key": "english", "name": "English", "display_order": 3},
+    {"type": "subject", "key": "kinyarwanda", "name": "Kinyarwanda", "display_order": 4},
+    {"type": "subject", "key": "science", "name": "Science", "display_order": 5},
 ]
 
-SUBJECTS = [
-    {"id": "computer_science", "name": "Computer Science", "icon": "cpu", "display_order": 1},
-    {"id": "mathematics", "name": "Mathematics", "icon": "calculator", "display_order": 2},
-    {"id": "english", "name": "English", "icon": "book", "display_order": 3},
-    {"id": "kinyarwanda", "name": "Kinyarwanda", "icon": "message-circle", "display_order": 4},
-    {"id": "science", "name": "Science", "icon": "flask-conical", "display_order": 5},
-]
 
+async def upsert_metadata(session):
+    existing = await session.execute(select(CurriculumMetadata.key))
+    existing_keys = {row[0] for row in existing.all()}
 
-async def upsert_grades(session):
-    existing = await session.execute(select(Grade.id))
-    existing_ids = {row[0] for row in existing.all()}
-
-    for g in GRADES:
-        if g["id"] in existing_ids:
-            # update minimal fields in case they changed
-            grade = await session.get(Grade, g["id"])
-            grade.name = g["name"]
-            grade.level = g["level"]
-            grade.display_order = g["display_order"]
+    for item in METADATA:
+        if item["key"] in existing_keys:
+            # Update existing
+            result = await session.execute(
+                select(CurriculumMetadata).where(
+                    CurriculumMetadata.key == item["key"]
+                )
+            )
+            entry = result.scalar_one()
+            entry.name = item["name"]
+            entry.type = item["type"]
+            entry.display_order = item["display_order"]
+            entry.is_active = True
         else:
-            session.add(Grade(**g))
-
-
-async def upsert_subjects(session):
-    existing = await session.execute(select(Subject.id))
-    existing_ids = {row[0] for row in existing.all()}
-
-    for s in SUBJECTS:
-        if s["id"] in existing_ids:
-            subj = await session.get(Subject, s["id"])
-            subj.name = s["name"]
-            subj.icon = s.get("icon")
-            subj.display_order = s["display_order"]
-        else:
-            session.add(Subject(**s))
+            # Create new
+            session.add(
+                CurriculumMetadata(
+                    id=str(uuid.uuid4()),
+                    is_active=True,
+                    **item,
+                )
+            )
 
 
 async def main():
     async with async_session_maker() as session:
-        await upsert_grades(session)
-        await upsert_subjects(session)
+        await upsert_metadata(session)
         await session.commit()
 
-    print("Seeded grades + subjects")
+    print("Seeded curriculum metadata (grades + subjects)")
 
 
 if __name__ == "__main__":

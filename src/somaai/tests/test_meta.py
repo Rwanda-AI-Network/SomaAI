@@ -15,7 +15,7 @@ import time
 
 from fastapi.testclient import TestClient
 
-from somaai.db.models import Document, Grade, Subject, Topic
+from somaai.db.models import CurriculumMetadata, Document, Topic
 from somaai.db.session import async_session_maker
 from somaai.modules.meta.service import (
     CACHE_TTL,
@@ -50,38 +50,28 @@ async def _seed_grades():
     """Seed grade records and return their IDs."""
     async with async_session_maker() as db:
         grades = [
-            Grade(id="P6", name="Primary 6", level="primary", display_order=6),
-            Grade(id="S1", name="Senior 1", level="secondary", display_order=7),
-            Grade(id="S2", name="Senior 2", level="secondary", display_order=8),
+            CurriculumMetadata(type="grade", key="P6", name="Primary 6", display_order=6),
+            CurriculumMetadata(type="grade", key="S1", name="Senior 1", display_order=7),
+            CurriculumMetadata(type="grade", key="S2", name="Senior 2", display_order=8),
         ]
         for g in grades:
             db.add(g)
         await db.commit()
-    return [g.id for g in grades]
+    return [g.key for g in grades]
 
 
 async def _seed_subjects():
     """Seed subject records and return their IDs."""
     async with async_session_maker() as db:
         subjects = [
-            Subject(
-                id="mathematics",
-                name="Mathematics",
-                icon="calculator",
-                display_order=1,
-            ),
-            Subject(id="english", name="English", icon="book", display_order=2),
-            Subject(
-                id="science",
-                name="Science",
-                icon="flask-conical",
-                display_order=3,
-            ),
+            CurriculumMetadata(type="subject", key="mathematics", name="Mathematics", display_order=1),
+            CurriculumMetadata(type="subject", key="english", name="English", display_order=2),
+            CurriculumMetadata(type="subject", key="science", name="Science", display_order=3),
         ]
         for s in subjects:
             db.add(s)
         await db.commit()
-    return [s.id for s in subjects]
+    return [s.key for s in subjects]
 
 
 async def _seed_document(grade: str, subject: str) -> str:
@@ -131,8 +121,7 @@ async def _cleanup_all():
     async with async_session_maker() as db:
         await db.execute(delete(Topic))
         await db.execute(delete(Document))
-        await db.execute(delete(Subject))
-        await db.execute(delete(Grade))
+        await db.execute(delete(CurriculumMetadata))
         await db.commit()
 
 
@@ -165,7 +154,7 @@ class TestGetGrades:
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 3
-        ids = {g["id"] for g in data}
+        ids = {g["key"] for g in data}
         assert ids == {"P6", "S1", "S2"}
 
     def test_response_schema(self, client: TestClient):
@@ -174,9 +163,9 @@ class TestGetGrades:
         data = client.get("/api/v1/meta/grades").json()
         for grade in data:
             assert isinstance(grade["id"], str)
+            assert isinstance(grade["key"], str)
             assert isinstance(grade["name"], str)
             assert isinstance(grade["display_order"], int)
-            assert grade["level"] in ("primary", "secondary")
 
     def test_sorted_by_display_order(self, client: TestClient):
         """Grades are returned in ascending display_order."""
@@ -185,20 +174,11 @@ class TestGetGrades:
         orders = [g["display_order"] for g in data]
         assert orders == sorted(orders), f"Not sorted: {orders}"
 
-    def test_primary_vs_secondary_levels(self, client: TestClient):
-        """P6 is primary; S1, S2 are secondary."""
-        _run(_seed_grades())
-        data = client.get("/api/v1/meta/grades").json()
-        grade_levels = {g["id"]: g["level"] for g in data}
-        assert grade_levels["P6"] == "primary"
-        assert grade_levels["S1"] == "secondary"
-        assert grade_levels["S2"] == "secondary"
-
     def test_no_duplicate_ids(self, client: TestClient):
         """Grade IDs must be unique."""
         _run(_seed_grades())
         data = client.get("/api/v1/meta/grades").json()
-        ids = [g["id"] for g in data]
+        ids = [g["key"] for g in data]
         assert len(ids) == len(set(ids)), f"Duplicate IDs: {ids}"
 
 
@@ -230,10 +210,9 @@ class TestGetSubjects:
         data = client.get("/api/v1/meta/subjects").json()
         for s in data:
             assert isinstance(s["id"], str)
+            assert isinstance(s["key"], str)
             assert isinstance(s["name"], str)
             assert isinstance(s["display_order"], int)
-            # icon can be str or None
-            assert s["icon"] is None or isinstance(s["icon"], str)
 
     def test_sorted_by_display_order(self, client: TestClient):
         """Subjects returned in ascending display_order."""

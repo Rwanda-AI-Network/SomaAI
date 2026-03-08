@@ -41,14 +41,14 @@ class ConversationService:
 
         # Existence validation (CTO Hardening)
         if not await self.meta_service.check_exists_grade(grade):
-            valid_grades = await self.meta_service.get_grades()
-            grade_list = ", ".join(g.id for g in valid_grades[:10])  # Limit to 10
+            valid_grades = await self.meta_service.get_metadata(meta_type="grade")
+            grade_list = ", ".join(g.key for g in valid_grades[:10])
             raise ValueError(f"Invalid grade '{grade}'. Valid grades: {grade_list}")
         if subject != "general" and not await self.meta_service.check_exists_subject(
             subject
         ):
-            valid_subjects = await self.meta_service.get_subjects()
-            subject_list = ", ".join(s.id for s in valid_subjects[:10])  # Limit to 10
+            valid_subjects = await self.meta_service.get_metadata(meta_type="subject")
+            subject_list = ", ".join(s.key for s in valid_subjects[:10])
             raise ValueError(
                 f"Invalid subject '{subject}'. Valid subjects: {subject_list}"
             )

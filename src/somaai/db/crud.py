@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from somaai.db.models import Document, Grade, Job, Subject, Topic
+from somaai.db.models import CurriculumMetadata, Document, Job, Topic
 
 # ====================
 # Job CRUD Operations
@@ -412,150 +412,86 @@ async def get_chunks_by_document(db: AsyncSession, document_id: str) -> list:
 # ==========================
 
 
-async def get_all_grades(db: AsyncSession) -> list[Grade]:
-    """Get all grades ordered by display_order.
+async def get_all_metadata(
+    db: AsyncSession, meta_type: str | None = None
+) -> list[CurriculumMetadata]:
+    """Get all curriculum metadata entries, optionally filtered by type.
+
+    Args:
+        db: Database session
+        meta_type: Optional filter — 'grade' or 'subject'
 
     Returns:
-        List of Grade instances sorted by display_order
+        List of CurriculumMetadata instances sorted by display_order
     """
-    result = await db.execute(select(Grade).order_by(Grade.display_order))
+    query = select(CurriculumMetadata)
+    if meta_type:
+        query = query.where(CurriculumMetadata.type == meta_type)
+    query = query.order_by(CurriculumMetadata.display_order)
+    result = await db.execute(query)
     return list(result.scalars().all())
 
 
-async def create_grade(db: AsyncSession, grade_data: dict) -> Grade:
-    """Create a new grade.
+async def create_metadata(
+    db: AsyncSession, metadata_data: dict
+) -> CurriculumMetadata:
+    """Create a new curriculum metadata entry.
 
     Raises:
-        ConflictError: If grade with same ID already exists
+        ConflictError: If entry with same key already exists
         ValidationError: If required fields are missing or invalid
     """
     from sqlalchemy.exc import IntegrityError
 
     from somaai.exceptions import ConflictError, ValidationError
 
-    grade = Grade(**grade_data)
-    db.add(grade)
+    entry = CurriculumMetadata(**metadata_data)
+    db.add(entry)
     try:
         await db.commit()
-        await db.refresh(grade)
-        return grade
+        await db.refresh(entry)
+        return entry
     except IntegrityError as e:
         await db.rollback()
         error_msg = str(e).lower()
         if "duplicate key" in error_msg or "unique constraint" in error_msg:
             raise ConflictError(
-                f"Grade with ID '{grade_data.get('id')}' already exists"
+                f"Metadata with key '{metadata_data.get('key')}' already exists"
             )
         elif "not null" in error_msg or "null value" in error_msg:
             raise ValidationError("Required field is missing")
-        elif "foreign key" in error_msg:
-            raise ValidationError("Referenced resource does not exist")
         else:
             import logging
 
             logging.getLogger(__name__).error(
                 "Database constraint violation",
-                extra={"grade_id": grade_data.get("id"), "error": str(e)},
+                extra={"key": metadata_data.get("key"), "error": str(e)},
                 exc_info=True,
             )
             raise ValidationError("Invalid data provided")
 
 
-async def update_grade(
-    db: AsyncSession, grade_id: str, grade_data: dict
-) -> Grade | None:
-    """Update an existing grade."""
-    grade = await db.get(Grade, grade_id)
-    if not grade:
+async def update_metadata(
+    db: AsyncSession, metadata_id: str, metadata_data: dict
+) -> CurriculumMetadata | None:
+    """Update an existing curriculum metadata entry."""
+    entry = await db.get(CurriculumMetadata, metadata_id)
+    if not entry:
         return None
-    for key, value in grade_data.items():
+    for key, value in metadata_data.items():
         if value is not None:
-            setattr(grade, key, value)
+            setattr(entry, key, value)
     await db.commit()
-    await db.refresh(grade)
-    return grade
+    await db.refresh(entry)
+    return entry
 
 
-async def delete_grade(db: AsyncSession, grade_id: str) -> bool:
-    """Delete a grade."""
-    grade = await db.get(Grade, grade_id)
-    if not grade:
+async def delete_metadata(db: AsyncSession, metadata_id: str) -> bool:
+    """Delete a curriculum metadata entry."""
+    entry = await db.get(CurriculumMetadata, metadata_id)
+    if not entry:
         return False
-    await db.delete(grade)
-    await db.commit()
-    return True
-
-
-async def get_all_subjects(db: AsyncSession) -> list[Subject]:
-    """Get all subjects ordered by display_order.
-
-    Returns:
-        List of Subject instances sorted by display_order
-    """
-    result = await db.execute(select(Subject).order_by(Subject.display_order))
-    return list(result.scalars().all())
-
-
-async def create_subject(db: AsyncSession, subject_data: dict) -> Subject:
-    """Create a new subject.
-
-    Raises:
-        ConflictError: If subject with same ID already exists
-        ValidationError: If required fields are missing or invalid
-    """
-    from sqlalchemy.exc import IntegrityError
-
-    from somaai.exceptions import ConflictError, ValidationError
-
-    subject = Subject(**subject_data)
-    db.add(subject)
-    try:
-        await db.commit()
-        await db.refresh(subject)
-        return subject
-    except IntegrityError as e:
-        await db.rollback()
-        error_msg = str(e).lower()
-        if "duplicate key" in error_msg or "unique constraint" in error_msg:
-            raise ConflictError(
-                f"Subject with ID '{subject_data.get('id')}' already exists"
-            )
-        elif "not null" in error_msg or "null value" in error_msg:
-            raise ValidationError("Required field is missing")
-        elif "foreign key" in error_msg:
-            raise ValidationError("Referenced resource does not exist")
-        else:
-            import logging
-
-            logging.getLogger(__name__).error(
-                "Database constraint violation",
-                extra={"subject_id": subject_data.get("id"), "error": str(e)},
-                exc_info=True,
-            )
-            raise ValidationError("Invalid data provided")
-
-
-async def update_subject(
-    db: AsyncSession, subject_id: str, subject_data: dict
-) -> Subject | None:
-    """Update an existing subject."""
-    subject = await db.get(Subject, subject_id)
-    if not subject:
-        return None
-    for key, value in subject_data.items():
-        if value is not None:
-            setattr(subject, key, value)
-    await db.commit()
-    await db.refresh(subject)
-    return subject
-
-
-async def delete_subject(db: AsyncSession, subject_id: str) -> bool:
-    """Delete a subject."""
-    subject = await db.get(Subject, subject_id)
-    if not subject:
-        return False
-    await db.delete(subject)
+    await db.delete(entry)
     await db.commit()
     return True
 

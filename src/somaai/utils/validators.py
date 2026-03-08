@@ -1,9 +1,8 @@
 """DB-driven validation for curriculum metadata.
 
-Instead of hardcoded enums, grades and subjects are validated against
-the Grade/Subject DB tables via MetaService (which caches responses
-in L1 in-process + L2 Redis).  Adding a new grade or subject only
-requires a DB insert — no code deployment needed.
+Grades and subjects are validated against the curriculum_metadata table
+via MetaService (which caches responses in L1 in-process + L2 Redis).
+Adding a new grade or subject only requires an API call — no deployment.
 """
 
 from __future__ import annotations
@@ -20,9 +19,9 @@ logger = logging.getLogger(__name__)
 
 
 async def validate_grade(db: AsyncSession, grade: str) -> str:
-    """Validate that *grade* exists in the Grade table.
+    """Validate that *grade* exists in the curriculum_metadata table.
 
-    Returns the normalised (uppercased) grade ID.
+    Returns the normalised (uppercased) grade key.
 
     Raises:
         HTTPException 422 if the grade is unknown.
@@ -31,20 +30,20 @@ async def validate_grade(db: AsyncSession, grade: str) -> str:
 
     grade = grade.upper()
     service = MetaService(db)
-    grades = await service.get_grades()
-    valid_ids = {g.id for g in grades}
-    if grade not in valid_ids:
+    entries = await service.get_metadata(meta_type="grade")
+    valid_keys = {e.key for e in entries}
+    if grade not in valid_keys:
         raise HTTPException(
             status_code=422,
-            detail=f"Grade '{grade}' not found. Valid grades: {sorted(valid_ids)}",
+            detail=f"Grade '{grade}' not found. Valid grades: {sorted(valid_keys)}",
         )
     return grade
 
 
 async def validate_subject(db: AsyncSession, subject: str) -> str:
-    """Validate that *subject* exists in the Subject table.
+    """Validate that *subject* exists in the curriculum_metadata table.
 
-    Returns the normalised (lowercased) subject ID.
+    Returns the normalised (lowercased) subject key.
 
     Raises:
         HTTPException 422 if the subject is unknown.
@@ -53,10 +52,10 @@ async def validate_subject(db: AsyncSession, subject: str) -> str:
 
     subject = subject.lower()
     service = MetaService(db)
-    subjects = await service.get_subjects()
-    valid_ids = {s.id for s in subjects}
-    if subject not in valid_ids:
-        msg = f"Subject '{subject}' not found. Valid subjects: {sorted(valid_ids)}"
+    entries = await service.get_metadata(meta_type="subject")
+    valid_keys = {e.key for e in entries}
+    if subject not in valid_keys:
+        msg = f"Subject '{subject}' not found. Valid subjects: {sorted(valid_keys)}"
         raise HTTPException(
             status_code=422,
             detail=msg,

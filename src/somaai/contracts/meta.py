@@ -1,64 +1,49 @@
 """Metadata endpoint schemas."""
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
-class GradeCreate(BaseModel):
-    """Schema for creating a new grade level."""
+class MetadataCreate(BaseModel):
+    """Schema for creating a new curriculum metadata entry."""
 
-    id: str = Field(..., description="Grade ID (e.g., 'P1', 'S3')")
-    name: str = Field(..., description="Display name (e.g., 'Primary 1', 'Senior 3')")
+    type: str = Field(
+        ..., description="Metadata type: 'grade' or 'subject'", pattern="^(grade|subject)$"
+    )
+    key: str = Field(
+        ..., description="Unique key (e.g., 'P6', 'computer_science')", min_length=1, max_length=50
+    )
+    name: str = Field(
+        ..., description="Display name (e.g., 'Primary 6', 'Computer Science')", min_length=1
+    )
     display_order: int = Field(0, description="Sort order for UI")
-    level: str = Field(..., description="Level category (primary/secondary)")
+    is_active: bool = Field(True, description="Whether this entry is active")
 
 
-class GradeUpdate(BaseModel):
-    """Schema for updating an existing grade level."""
+class MetadataUpdate(BaseModel):
+    """Schema for updating an existing metadata entry."""
 
     name: str | None = Field(None, description="Display name")
     display_order: int | None = Field(None, description="Sort order for UI")
-    level: str | None = Field(None, description="Level category")
+    is_active: bool | None = Field(None, description="Whether this entry is active")
 
 
-class GradeResponse(BaseModel):
-    """Grade level metadata.
+class MetadataResponse(BaseModel):
+    """Curriculum metadata response.
 
-    Returned by GET /api/v1/meta/grades.
+    Returned by GET /api/v1/meta/metadata.
     """
 
-    id: str = Field(..., description="Grade ID (e.g., 'P1', 'S3')")
-    name: str = Field(..., description="Display name (e.g., 'Primary 1', 'Senior 3')")
-    display_order: int = Field(..., description="Sort order for UI")
-    level: str = Field(..., description="Level category (primary/secondary)")
-
-
-class SubjectCreate(BaseModel):
-    """Schema for creating a new subject."""
-
-    id: str = Field(..., description="Subject ID")
+    id: str = Field(..., description="Unique ID")
+    type: str = Field(..., description="'grade' or 'subject'")
+    key: str = Field(..., description="Unique key")
     name: str = Field(..., description="Display name")
-    display_order: int = Field(0, description="Sort order for UI")
-    icon: str | None = Field(None, description="Icon identifier for UI")
+    display_order: int = Field(0, description="Sort order")
+    is_active: bool = Field(True, description="Active flag")
+    created_at: datetime | None = Field(None, description="Creation timestamp")
+    updated_at: datetime | None = Field(None, description="Last update timestamp")
 
-
-class SubjectUpdate(BaseModel):
-    """Schema for updating an existing subject."""
-
-    name: str | None = Field(None, description="Display name")
-    display_order: int | None = Field(None, description="Sort order for UI")
-    icon: str | None = Field(None, description="Icon identifier for UI")
-
-
-class SubjectResponse(BaseModel):
-    """Subject metadata.
-
-    Returned by GET /api/v1/meta/subjects.
-    """
-
-    id: str = Field(..., description="Subject ID")
-    name: str = Field(..., description="Display name")
-    display_order: int = Field(..., description="Sort order for UI")
-    icon: str | None = Field(None, description="Icon identifier for UI")
 
 
 class TopicCreate(BaseModel):

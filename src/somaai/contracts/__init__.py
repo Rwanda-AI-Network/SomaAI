@@ -32,8 +32,7 @@ from somaai.contracts.jobs import (
     JobStatus,
 )
 from somaai.contracts.meta import (
-    GradeResponse,
-    SubjectResponse,
+    MetadataResponse,
     TopicResponse,
 )
 from somaai.contracts.quiz import (
@@ -75,8 +74,7 @@ __all__ = [
     "FeedbackRequest",
     "FeedbackResponse",
     # Meta
-    "GradeResponse",
-    "SubjectResponse",
+    "MetadataResponse",
     "TopicResponse",
     # Jobs
     "JobStatus",

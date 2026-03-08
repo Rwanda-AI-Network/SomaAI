@@ -22,22 +22,17 @@ from sqlalchemy.sql import func
 from somaai.db.base import Base
 
 
-class Grade(Base):
-    __tablename__ = "grades"
+class CurriculumMetadata(Base):
+    __tablename__ = "curriculum_metadata"
 
-    id = Column(String(10), primary_key=True)  # P6, S1...
-    name = Column(String(50), nullable=False)  # "Primary 6", "Secondary 1"
-    level = Column(String(20), nullable=False)  # primary/secondary
-    display_order = Column(Integer, nullable=False, default=0)
-
-
-class Subject(Base):
-    __tablename__ = "subjects"
-
-    id = Column(String(50), primary_key=True)  # computer_science
-    name = Column(String(100), nullable=False)  # "Computer Science"
-    icon = Column(String(50), nullable=True)
-    display_order = Column(Integer, nullable=False, default=0)
+    id = Column(String(36), primary_key=True)
+    type = Column(String(20), nullable=False, index=True)   # "grade" | "subject"
+    key = Column(String(50), nullable=False, unique=True)    # "S6", "computer_science"
+    name = Column(String(100), nullable=False)               # "Secondary 6", "Computer Science"
+    display_order = Column(Integer, default=0)
+    is_active = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
 class Document(Base):
