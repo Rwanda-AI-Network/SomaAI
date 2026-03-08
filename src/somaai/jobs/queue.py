@@ -43,7 +43,11 @@ async def get_redis_pool():
                 host=host,
                 port=port,
                 database=db,
-                password=settings.redis_password or None,
+                password=(
+                    settings.redis_password.get_secret_value()
+                    if settings.redis_password
+                    else None
+                ),
             )
         )
     except ImportError:

@@ -1,221 +1,162 @@
 # Contributing to SomaAI
 
-Thank you for your interest in contributing to SomaAI.
-This document explains how to work on the project safely and efficiently.
+Thank you for your interest in contributing to SomaAI. This document explains branching strategy, pull request process, coding standards, and commit conventions.
 
+For local setup instructions, see [DEVELOPMENT.md](docs/DEVELOPMENT.md).
+
+---
 
 ## Project Philosophy
 
-- Contracts first (Pydantic schemas are the source of truth)
-- Database-backed features
-- Mock-first development (no API keys required)
-- Small, focused pull requests
-- One issue = one PR
+- **Contracts first** — Pydantic schemas are the source of truth for API boundaries
+- **Database-backed features** — State belongs in PostgreSQL, not in memory
+- **Mock-first development** — No API keys required (`LLM_BACKEND=mock`)
+- **Small, focused pull requests** — One issue = one PR
+- **Document-backed answers** — Educational content must come from ingested REB materials
 
+---
 
+## Issue Workflow
 
-## Getting Started
+All work must start from an issue.
 
-### Prerequisites
+1. Find an existing issue or open a new one describing the change
+2. Get assigned (comment on the issue to claim it)
+3. One issue = one pull request
+4. Reference the issue number in your PR title
 
-- Python 3.10 or higher
-- [uv](https://github.com/astral-sh/uv) package manager
-- Docker (recommended for full development environment)
+---
 
-### Local Development Setup
+## Branching Strategy
 
-**Option 1: Full Stack with Docker (Recommended)**
+### Branch Naming
 
-```bash
-# Clone and enter the repository
-git clone https://github.com/Rwanda-AI-Network/SomaAI.git
-cd SomaAI
+Use the format `type/short-description`:
 
-# Copy environment variables
-cp .env.example .env
+| Type | Use Case | Example |
+|------|----------|---------|
+| `feature/` | New functionality | `feature/quiz-generation` |
+| `fix/` | Bug fixes | `fix/retrieval-accuracy` |
+| `docs/` | Documentation updates | `docs/api-reference` |
+| `refactor/` | Code restructuring | `refactor/pipeline-stages` |
+| `test/` | Adding or fixing tests | `test/chat-endpoint` |
 
-uv sync
+### Workflow
 
-# Start all services (postgres, redis, qdrant, app)
-make docker
+```
+main
+ └── feature/add-quiz-generation   ← your branch
+      └── (squash merge back to main)
 ```
 
-This starts:
-- PostgreSQL on `localhost:5432`
-- Redis on `localhost:6379`
-- Qdrant on `http://localhost:6333`
-- App on `http://localhost:8000`
-
-**Option 2: Local Python Development**
-
-```bash
-# Install dependencies
-make install
-
-# Or with all optional dependencies
-uv sync --extra all
-
-# Start external services separately, then:
-make dev
-```
-
-### Initial Setup (After Clone)
-
-```bash
-# Apply database migrations
-.venv/bin/python -m alembic upgrade head
-
-# Seed grades and subjects
-make seed-meta
-```
-
-This creates the initial data (P6, S1-S6 grades and subjects like Computer Science, Mathematics, etc.).
-
-### Mock LLM Mode
-
-The project runs in mock mode by default:
-
-```bash
-# Set LLM_BACKEND=mock in .env
-```
-No LLM API keys are required for development.
-
-### MVP Identification (No Auth)
-
-For MVP development, we use headers instead of authentication:
-
-| Role | Header | Usage |
-|------|--------|-------|
-| Student | `X-Actor-Id` | Optional, frontend-generated UUID |
-| Teacher | `X-Teacher-Id` | Required for teacher endpoints |
-
-Example:
-```bash
-curl -X POST http://localhost:8000/api/v1/chat/ask \
-  -H "Content-Type: application/json" \
-  -H "X-Actor-Id: student_abc123" \
-  -d '{"query": "What is a variable?", "grade": "S1", "subject": "computer_science", "user_role": "student"}'
-```
-
-### Issue Workflow (IMPORTANT)
-
-   - All work must start from an issue
-   - One issue = one pull request
-   - Reference the issue number in your PR title
-
-Example:
-
-```bash
-feat(chat): implement ask endpoint (#12)
-```
-
-
-<!-- ### Branch Naming
-
-   - feature/chat-service
-   - feature/quiz-generator
-   - fix/citation-order
-   - docs/readme-update -->
-
-### Development Rules
-
-- You MAY change
-
-   - Business logic in modules/
-   - Endpoint implementations
-   - Tests
-   - Documentation
-
-- You MUST NOT change without approval
-
-   - API contracts (contracts/)
-   - Database models (db/models.py)
-   - Global settings structure
-
-
-### Development Workflow
-
-#### Branch Naming
-
-Use descriptive branch names:
-- `feature/add-quiz-generation` - New features
-- `fix/retrieval-accuracy` - Bug fixes
-- `docs/api-documentation` - Documentation updates
-
-### Making Changes
-
-1. Create a new branch from `main`
+1. Create a branch from `main`
 2. Make your changes
-3. Run linting and tests:
+3. Open a PR targeting `main`
+4. After review and CI pass, squash-merge
 
-   ```bash
-   make lint
-   make test
-   ```
-4. Commit your changes with a clear message
-5. Push and open a Pull Request
+---
 
+## Commit Conventions
 
-### Adding a New Endpoint
+We use [Conventional Commits](https://www.conventionalcommits.org/):
 
-1. Create schema in `contracts/`
-2. Create service in `modules/{module}/service.py`
-3. Create endpoint in `api/v1/endpoints/{module}.py`
-4. Register router in `api/v1/router.py`
-5. Add tests in `tests/test_{module}.py`
-
-### Code Style
-
-We use Ruff and MyPy.
-
-```bash
-# Check linting
-make lint
-
-# Or directly
-uv run ruff check src/
-uv run ruff format src/
+```
+<type>(<scope>): <description> (#issue)
 ```
 
-### Testing
+### Types
 
-```bash
-# Run all tests
-make test
+| Type | When to Use |
+|------|-------------|
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `docs` | Documentation only |
+| `refactor` | Code change that neither fixes a bug nor adds a feature |
+| `test` | Adding or updating tests |
+| `chore` | Build, CI, or tooling changes |
+| `perf` | Performance improvement |
 
-# Run specific test file
-uv run pytest src/somaai/tests/test_chat.py -v
+### Scopes
 
-# Run with coverage
-uv run pytest --cov=somaai
+Use the module name as scope: `chat`, `rag`, `ingest`, `quiz`, `meta`, `teacher`, `feedback`, `docs`, `api`, `db`, `cache`, `jobs`.
+
+### Examples
+
+```
+feat(chat): implement ask endpoint (#12)
+fix(rag): correct fallback filter logic (#45)
+docs(readme): add architecture diagram
+refactor(ingest): extract quality filter to stage
+test(quiz): add generation edge cases (#33)
+chore(ci): add lint step to workflow
 ```
 
-### Database Migrations
+---
 
-We use Alembic.
+## Pull Request Process
 
-```bash
-uv run alembic revision --autogenerate -m "Add new table"
-uv run alembic upgrade head
+### Before Submitting
+
+- [ ] Code follows project style guidelines (`make lint` passes)
+- [ ] All tests pass locally (`make test`)
+- [ ] New functionality includes tests
+- [ ] Documentation is updated if needed
+- [ ] PR description clearly explains the changes and links the issue
+
+### PR Title Format
+
+```
+type(scope): description (#issue-number)
 ```
 
-### Adding a New Feature
+Example: `feat(chat): implement ask endpoint (#12)`
 
-   - Check existing API contracts
-   - Implement logic in modules/
-   - Wire endpoint in api/v1/endpoints/
-   - Add tests
-   - Open a pull request
+### Review Process
 
-Note: Copilot code review may leave automated suggestions on pull requests. These are advisory and do not replace human code review or approval.
+1. Open your PR — CI runs automatically (lint + tests)
+2. A maintainer will review within 48 hours
+3. Address review feedback with fixup commits
+4. Once approved, the PR will be squash-merged by a maintainer
 
-### Educational Content Rules
+> **Note:** Copilot code review may leave automated suggestions on PRs. These are advisory and do not replace human review.
 
-   - Must align with REB curriculum
-   - Avoid hallucinated facts
-   - Prefer document-backed answers
-   - Be age-appropriate
+---
 
+## What You May and May Not Change
+
+### You MAY change without prior approval
+
+- Business logic in `modules/`
+- Endpoint implementations in `api/v1/endpoints/`
+- Tests
+- Documentation
+
+### You MUST get maintainer approval before changing
+
+- API contracts (`contracts/`) — these are shared interfaces
+- Database models (`db/models.py`) — requires migration coordination
+- Global settings structure (`settings.py`)
+- CI/CD workflows (`.github/workflows/`)
+
+---
+
+## Coding Standards
+
+### Tooling
+
+| Tool | Purpose | Command |
+|------|---------|---------|
+| [Ruff](https://docs.astral.sh/ruff/) | Linting + formatting | `make lint` |
+| [MyPy](https://mypy.readthedocs.io/) | Type checking | `uv run mypy src/` |
+| [pytest](https://docs.pytest.org/) | Testing | `make test` |
+
+### Style Rules
+
+- Use type hints on all function signatures
+- Use `from __future__ import annotations` for forward references
+- Prefer `async` functions for I/O-bound operations
+- Use structured logging (`logger.info(...)`) over `print()`
+- Follow existing module patterns — check a similar module before creating a new one
 
 ### Adding a New Module
 
@@ -226,60 +167,42 @@ modules/new_module/
 └── (other files)    # As needed
 ```
 
-## Pull Request Guidelines
+Then:
 
-Before submitting a PR:
+1. Create request/response schema in `contracts/`
+2. Create service in `modules/{module}/service.py`
+3. Create endpoint in `api/v1/endpoints/{module}.py`
+4. Register the router in `api/v1/router.py`
+5. Add tests in `tests/test_{module}.py`
 
-- [ ] Code follows the project style guidelines (ruff passes)
-- [ ] All tests pass locally
-- [ ] New functionality includes tests
-- [ ] Documentation is updated if needed
-- [ ] PR description clearly explains the changes
+### Adding a New Endpoint
 
-### Educational Content Guidelines
+Follow the same 5-step process above. The contract (Pydantic schema) always comes first.
+
+---
+
+## Educational Content Guidelines
 
 When contributing features that affect educational content:
 
 - Ensure alignment with Rwanda Education Board (REB) curriculum standards
+- Avoid hallucinated facts — prefer document-backed answers
 - Test with both English and Kinyarwanda content where applicable
-- Consider accessibility for all students and teachers
+- Be age-appropriate for the target grade level (P6 through S6)
+
+---
 
 ## Reporting Issues
 
-When reporting bugs, please include:
+When reporting bugs, include:
 
-- Steps to reproduce the issue
+- Steps to reproduce
 - Expected vs actual behavior
 - Environment details (OS, Python version, Docker version)
-- Relevant logs or error messages
+- Relevant logs or error messages (use `docker logs somaai-app` for container logs)
 
-### Available Make Commands
-
-| Command | Description |
-|---------|-------------|
-| `make help` | Show all available commands |
-| `make install` | Install dependencies with uv |
-| `make dev` | Run development server |
-| `make lint` | Run linting (ruff + mypy) |
-| `make test` | Run tests |
-| `make docker` | Run with Docker (postgres + redis + qdrant) |
-| `make docker-stop` | Stop Docker containers |
-| `make seed-meta` | Seed grades and subjects |
-| `make clean` | Clean build artifacts |
-
-## Database Strategy
-
-| Environment | Database |
-|-------------|----------|
-| Development | PostgreSQL (Docker) |
-| Production | NeonDB (serverless Postgres) |
-
-Both use the same SQLAlchemy models and Alembic migrations.
-
-## Questions?
-
-For questions or discussions, please open an issue or reach out to the maintainers.
+---
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the Apache-2.0 license.
+By contributing, you agree that your contributions will be licensed under the [Apache-2.0 license](LICENSE).

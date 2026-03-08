@@ -32,6 +32,7 @@ class QualityFilterStage(PipelineStage):
         min_length: int = 50,
         min_quality: float = 0.3,
         remove_boilerplate: bool = True,
+        max_filter_ratio: float = 0.9,
     ):
         """Initialize filter parameters.
 
@@ -39,10 +40,14 @@ class QualityFilterStage(PipelineStage):
             min_length: Minimum chunk length in characters
             min_quality: Minimum quality score (0-1)
             remove_boilerplate: Whether to remove boilerplate text
+            max_filter_ratio: Maximum ratio of chunks that can be filtered (0-1).
+                If more than this fraction is dropped, the stage FAILS to
+                prevent silent data loss from overly aggressive filtering.
         """
         self.min_length = min_length
         self.min_quality = min_quality
         self.remove_boilerplate = remove_boilerplate
+        self.max_filter_ratio = max_filter_ratio
 
     def validate_input(self, ctx: PipelineContext) -> bool:
         """Ensure chunks exist."""
@@ -73,12 +78,43 @@ class QualityFilterStage(PipelineStage):
             final_count,
         )
 
-        # Warn if all chunks filtered (edge case)
+        # FAIL if ALL chunks were filtered — this is always data loss
         if final_count == 0 and original_count > 0:
-            logger.warning(
-                "All %d chunks were filtered! "
-                "Consider adjusting min_quality threshold.",
-                original_count,
+            return StageResult(
+                success=False,
+                data={
+                    "original": original_count,
+                    "remaining": 0,
+                    "filtered": original_count,
+                },
+                errors=[
+                    f"All {original_count} chunks were filtered out. "
+                    "Consider lowering min_quality or min_length thresholds."
+                ],
+            )
+
+        # FAIL if filter ratio exceeds the safety threshold
+        filter_ratio = filtered_count / original_count if original_count > 0 else 0
+        if filter_ratio > self.max_filter_ratio:
+            logger.error(
+                "Filter ratio %.1f%% exceeds max_filter_ratio %.1f%%. "
+                "Failing to prevent silent data loss.",
+                filter_ratio * 100,
+                self.max_filter_ratio * 100,
+            )
+            return StageResult(
+                success=False,
+                data={
+                    "original": original_count,
+                    "remaining": final_count,
+                    "filtered": filtered_count,
+                },
+                errors=[
+                    f"Excessive filtering: {filter_ratio:.0%} of chunks removed "
+                    f"(threshold: {self.max_filter_ratio:.0%}). "
+                    "This may indicate a document quality issue or "
+                    "overly strict filters."
+                ],
             )
 
         return StageResult(

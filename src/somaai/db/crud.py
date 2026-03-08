@@ -3,12 +3,12 @@
 Provides async database operations for Job and Document models.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from somaai.db.models import Document, Job
+from somaai.db.models import Document, Grade, Job, Subject, Topic
 
 # ====================
 # Job CRUD Operations
@@ -38,7 +38,7 @@ async def create_job(
         payload=payload,
         status="pending",
         progress_pct=0,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     db.add(job)
     await db.commit()
@@ -91,9 +91,9 @@ async def update_job_status(
     job.error = error
 
     if status == "running" and not job.started_at:
-        job.started_at = datetime.utcnow()
+        job.started_at = datetime.now(timezone.utc)
     elif status in ("completed", "failed"):
-        job.completed_at = datetime.utcnow()
+        job.completed_at = datetime.now(timezone.utc)
 
     await db.commit()
     return job
@@ -152,6 +152,9 @@ async def create_document(
     storage_path: str,
     grade: str,
     subject: str,
+    storage_backend: str = "local",
+    status: str = "pending",
+    content_hash: str | None = None,
 ) -> Document:
     """Create a new document record.
 
@@ -163,6 +166,9 @@ async def create_document(
         storage_path: Path to stored file
         grade: Grade level
         subject: Subject
+        storage_backend: Storage backend used (local, minio, s3)
+        status: Initial document status (default: pending)
+        content_hash: SHA-256 hex digest for deduplication
 
     Returns:
         Created Document instance
@@ -174,6 +180,9 @@ async def create_document(
         storage_path=storage_path,
         grade=grade,
         subject=subject,
+        storage_backend=storage_backend,
+        status=status,
+        content_hash=content_hash,
     )
     db.add(doc)
     await db.commit()
@@ -199,6 +208,7 @@ async def update_document_processed(
     db: AsyncSession,
     doc_id: str,
     page_count: int,
+    chunk_count: int | None = None,
 ) -> Document | None:
     """Mark document as processed.
 
@@ -206,6 +216,7 @@ async def update_document_processed(
         db: Database session
         doc_id: Document identifier
         page_count: Number of pages in document
+        chunk_count: Number of chunks extracted
 
     Returns:
         Updated Document instance if found, None otherwise
@@ -214,8 +225,37 @@ async def update_document_processed(
     if not doc:
         return None
 
-    doc.processed_at = datetime.utcnow()
+    doc.processed_at = datetime.now(timezone.utc)
     doc.page_count = page_count
+    doc.status = "completed"
+    if chunk_count is not None:
+        doc.chunk_count = chunk_count
+
+    await db.commit()
+    return doc
+
+
+async def update_document_status(
+    db: AsyncSession,
+    doc_id: str,
+    status: str,
+    error: str | None = None,
+) -> Document | None:
+    """Update document status and optional error message.
+
+    Args:
+        db: Database session
+        doc_id: Document identifier
+        status: New status (pending, processing, completed, failed)
+        error: Optional error message on failure
+    """
+    doc = await get_document(db, doc_id)
+    if not doc:
+        return None
+
+    doc.status = status
+    if error:
+        doc.error_message = error
     await db.commit()
     return doc
 
@@ -307,3 +347,274 @@ async def get_chunks_by_document(db: AsyncSession, document_id: str) -> list:
         .order_by(Chunk.chunk_index)
     )
     return list(result.scalars().all())
+
+
+# ==========================
+# Meta CRUD Operations
+# ==========================
+
+
+async def get_all_grades(db: AsyncSession) -> list[Grade]:
+    """Get all grades ordered by display_order.
+
+    Returns:
+        List of Grade instances sorted by display_order
+    """
+    result = await db.execute(select(Grade).order_by(Grade.display_order))
+    return list(result.scalars().all())
+
+
+async def create_grade(db: AsyncSession, grade_data: dict) -> Grade:
+    """Create a new grade."""
+    grade = Grade(**grade_data)
+    db.add(grade)
+    await db.commit()
+    await db.refresh(grade)
+    return grade
+
+
+async def update_grade(
+    db: AsyncSession, grade_id: str, grade_data: dict
+) -> Grade | None:
+    """Update an existing grade."""
+    grade = await db.get(Grade, grade_id)
+    if not grade:
+        return None
+    for key, value in grade_data.items():
+        if value is not None:
+            setattr(grade, key, value)
+    await db.commit()
+    await db.refresh(grade)
+    return grade
+
+
+async def delete_grade(db: AsyncSession, grade_id: str) -> bool:
+    """Delete a grade."""
+    grade = await db.get(Grade, grade_id)
+    if not grade:
+        return False
+    await db.delete(grade)
+    await db.commit()
+    return True
+
+
+async def get_all_subjects(db: AsyncSession) -> list[Subject]:
+    """Get all subjects ordered by display_order.
+
+    Returns:
+        List of Subject instances sorted by display_order
+    """
+    result = await db.execute(select(Subject).order_by(Subject.display_order))
+    return list(result.scalars().all())
+
+
+async def create_subject(db: AsyncSession, subject_data: dict) -> Subject:
+    """Create a new subject."""
+    subject = Subject(**subject_data)
+    db.add(subject)
+    await db.commit()
+    await db.refresh(subject)
+    return subject
+
+
+async def update_subject(
+    db: AsyncSession, subject_id: str, subject_data: dict
+) -> Subject | None:
+    """Update an existing subject."""
+    subject = await db.get(Subject, subject_id)
+    if not subject:
+        return None
+    for key, value in subject_data.items():
+        if value is not None:
+            setattr(subject, key, value)
+    await db.commit()
+    await db.refresh(subject)
+    return subject
+
+
+async def delete_subject(db: AsyncSession, subject_id: str) -> bool:
+    """Delete a subject."""
+    subject = await db.get(Subject, subject_id)
+    if not subject:
+        return False
+    await db.delete(subject)
+    await db.commit()
+    return True
+
+
+# async def get_subjects_for_grade(db: AsyncSession, grade: str) -> list[Subject]:
+#     """Get subjects that have documents for a specific grade.
+
+#     Falls back to all subjects on cold start (no documents ingested yet).
+
+#     Args:
+#         db: Database session
+#         grade: Grade ID (e.g., 'S2')
+
+#     Returns:
+#         List of Subject instances
+#     """
+#     from sqlalchemy import distinct
+
+#     # Find subjects with at least one document for this grade
+#     doc_result = await db.execute(
+#         select(distinct(Document.subject)).where(Document.grade == grade.upper())
+#     )
+#     subject_ids = [row[0] for row in doc_result.all()]
+
+#     if not subject_ids:
+#         # Cold start: no documents yet, return all subjects
+#         return await get_all_subjects(db)
+
+#     result = await db.execute(
+#         select(Subject)
+#         .where(Subject.id.in_(subject_ids))
+#         .order_by(Subject.display_order)
+#     )
+#     return list(result.scalars().all())
+
+# ==========================
+# Meta CRUD Operations (derived from documents)
+# ==========================
+
+
+async def get_distinct_grades(db: AsyncSession) -> list[dict]:
+    """Get grades that have at least one ingested document.
+
+    Returns list of dicts with grade string, e.g. [{"grade": "S2"}, {"grade": "S6"}]
+    """
+    from sqlalchemy import distinct
+
+    result = await db.execute(select(distinct(Document.grade)).order_by(Document.grade))
+    return [row[0] for row in result.all()]
+
+
+async def get_distinct_subjects(
+    db: AsyncSession, grade: str | None = None
+) -> list[dict]:
+    """Get subjects that have at least one ingested document.
+
+    Optionally filter by grade.
+    """
+    from sqlalchemy import distinct
+
+    query = select(distinct(Document.subject))
+    if grade:
+        query = query.where(Document.grade == grade.upper())
+    query = query.order_by(Document.subject)
+    result = await db.execute(query)
+    return [row[0] for row in result.all()]
+
+
+async def get_topics_by_grade_subject(
+    db: AsyncSession, grade: str, subject: str
+) -> list[Topic]:
+    """Get topics for a grade+subject combination.
+
+    Args:
+        db: Database session
+        grade: Grade ID (e.g., 'S2')
+        subject: Subject ID (e.g., 'biology')
+
+    Returns:
+        List of Topic instances ordered by page_start
+    """
+    result = await db.execute(
+        select(Topic)
+        .where(Topic.grade == grade.upper(), Topic.subject == subject.lower())
+        .order_by(Topic.page_start)
+    )
+    return list(result.scalars().all())
+
+
+async def get_topic_by_id(db: AsyncSession, topic_id: str) -> Topic | None:
+    """Get a single topic by ID.
+
+    Args:
+        db: Database session
+        topic_id: Topic identifier
+
+    Returns:
+        Topic instance if found, None otherwise
+    """
+    result = await db.execute(select(Topic).where(Topic.id == topic_id))
+    return result.scalar_one_or_none()
+
+
+# ==========================
+# Meta CRUD Operations (derived from documents) --- END
+# ==========================
+
+
+async def get_topics_by_ids(db: AsyncSession, topic_ids: list[str]) -> list[Topic]:
+    """Get multiple topics by IDs.
+
+    Args:
+        db: Database session
+        topic_ids: List of topic IDs
+
+    Returns:
+        List of Topic instances
+    """
+    if not topic_ids:
+        return []
+    result = await db.execute(
+        select(Topic).where(Topic.id.in_(topic_ids)).order_by(Topic.page_start)
+    )
+    return list(result.scalars().all())
+
+
+async def get_document_counts_by_subject(
+    db: AsyncSession, grade: str | None = None
+) -> dict[str, int]:
+    """Get document count per subject, optionally filtered by grade.
+
+    Args:
+        db: Database session
+        grade: Optional grade ID to filter by
+
+    Returns:
+        Dict mapping subject_id -> document count
+    """
+    from sqlalchemy import func as sqlfunc
+
+    query = select(Document.subject, sqlfunc.count(Document.id))
+    if grade:
+        query = query.where(Document.grade == grade.upper())
+    query = query.group_by(Document.subject)
+    result = await db.execute(query)
+    return dict(result.all())
+
+
+async def create_topic(db: AsyncSession, topic_id: str, topic_data: dict) -> Topic:
+    """Create a new topic."""
+    topic = Topic(id=topic_id, **topic_data)
+    db.add(topic)
+    await db.commit()
+    await db.refresh(topic)
+    return topic
+
+
+async def update_topic(
+    db: AsyncSession, topic_id: str, topic_data: dict
+) -> Topic | None:
+    """Update an existing topic."""
+    topic = await db.get(Topic, topic_id)
+    if not topic:
+        return None
+    for key, value in topic_data.items():
+        if value is not None:
+            setattr(topic, key, value)
+    await db.commit()
+    await db.refresh(topic)
+    return topic
+
+
+async def delete_topic(db: AsyncSession, topic_id: str) -> bool:
+    """Delete a topic."""
+    topic = await db.get(Topic, topic_id)
+    if not topic:
+        return False
+    await db.delete(topic)
+    await db.commit()
+    return True
