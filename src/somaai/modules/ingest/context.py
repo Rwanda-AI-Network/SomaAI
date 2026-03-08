@@ -30,10 +30,15 @@ class PipelineContext:
 
     # === Input Parameters ===
     doc_id: str
-    file_path: Path
+    file_path: Path  # kept for text_extractor compat (may be a temp path)
     grade: str
     subject: str
     title: str | None = None
+
+    # === Object Storage ===
+    file_content: bytes | None = None  # Raw bytes (buffered)
+    file_stream: Any | None = None  # File-like object (streaming)
+    storage_key: str | None = None  # Object key in MinIO/S3
 
     # === Processing Options ===
     skip_if_exists: bool = True

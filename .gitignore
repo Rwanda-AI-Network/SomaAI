@@ -39,7 +39,6 @@ venv.bak/
 
 # IDEs and editors
 .idea/
-.vscode/
 *.swp
 *.swo
 *~
@@ -84,8 +83,6 @@ ehthumbs.db
 Thumbs.db
 
 # Environment variables
-.env
-.env.local
 .env.*.local
 *.env
 
@@ -127,3 +124,9 @@ docker-compose.override.yml
 /scripts/create_issues.sh
 /.github/issues
 ./todo.md
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+.gitignore
+config.bat
+node_modules

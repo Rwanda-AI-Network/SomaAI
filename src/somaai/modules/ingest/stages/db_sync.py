@@ -53,16 +53,29 @@ class DatabaseSyncStage(PipelineStage):
 
                 await create_chunks(session, chunk_records)
 
-            logger.info(f"Synced {len(chunk_records)} chunks to PostgreSQL")
+                # Update document denormalized metadata (chunk_count + processed_at)
+                from somaai.db.crud import update_document_processed
+
+                await update_document_processed(
+                    session,
+                    doc_id=ctx.doc_id,
+                    page_count=ctx.page_count,
+                    chunk_count=len(chunk_records),
+                )
+
+            logger.info(
+                f"Synced {len(chunk_records)} chunks to PostgreSQL for doc {ctx.doc_id}"
+            )
 
             return StageResult(success=True, data={"synced_count": len(chunk_records)})
 
         except Exception as e:
             logger.error(f"Database sync failed: {e}")
-            # Don't fail the entire pipeline for DB sync
-            # Vector store is primary source of truth
+            # CRITICAL: Do NOT report success when DB sync fails.
+            # This ensures the orchestrator marks the doc as 'failed'
+            # rather than 'completed' with missing chunk records.
             return StageResult(
-                success=True,  # Still consider success
+                success=False,
                 data={"synced_count": 0},
                 errors=[f"DB sync failed: {e}"],
                 metadata={"db_sync_failed": True},

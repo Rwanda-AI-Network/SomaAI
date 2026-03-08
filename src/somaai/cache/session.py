@@ -6,7 +6,7 @@ than aiocache for session-style data with complex structures.
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 try:
     import redis.asyncio as redis
@@ -24,7 +24,9 @@ class Message:
 
     role: str  # "user" | "assistant" | "system"
     content: str
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    timestamp: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
 
     def to_dict(self) -> dict:
         return {"role": self.role, "content": self.content, "timestamp": self.timestamp}
@@ -42,7 +44,9 @@ class Session:
     session_id: str
     messages: list[Message] = field(default_factory=list)
     metadata: dict = field(default_factory=dict)
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
 
     def to_json(self) -> str:
         return json.dumps(
@@ -64,7 +68,7 @@ class Session:
             session_id=d["session_id"],
             messages=messages,
             metadata=d.get("metadata", {}),
-            created_at=d.get("created_at", datetime.utcnow().isoformat()),
+            created_at=d.get("created_at", datetime.now(timezone.utc).isoformat()),
         )
 
     def add_message(self, role: str, content: str) -> None:

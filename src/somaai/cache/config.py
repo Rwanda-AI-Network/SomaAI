@@ -39,7 +39,11 @@ class CacheConfig:
 
             return cls(
                 redis_url=main_settings.redis_cache_url,
-                redis_password=main_settings.redis_password,
+                redis_password=(
+                    main_settings.redis_password.get_secret_value()
+                    if main_settings.redis_password
+                    else None
+                ),
                 query_ttl=main_settings.cache_query_ttl,
                 embedding_ttl=main_settings.cache_embedding_ttl,
                 retrieval_ttl=main_settings.cache_retrieval_ttl,
