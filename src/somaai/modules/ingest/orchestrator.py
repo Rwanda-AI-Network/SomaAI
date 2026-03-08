@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from somaai.modules.ingest.context import PipelineContext
 from somaai.modules.ingest.exceptions import IngestionError
@@ -111,48 +111,59 @@ class IngestionOrchestrator:
     async def run(
         self,
         doc_id: str,
-        file_path: str,
+        file_path: Path,
         grade: str,
         subject: str,
+        file_content: bytes | None = None,
+        file_stream: Any | None = None,
+        storage_key: str | None = None,
         title: str | None = None,
         on_progress: Callable[[str, int], None] | None = None,
-        skip_if_exists: bool = True,
         ocr_mode: str = "auto",
         language: str = "eng",
-    ) -> dict:
-        """Execute the ingestion pipeline.
+        skip_if_exists: bool = True,
+        content_hash: str | None = None,
+    ) -> dict[str, Any]:
+        """Run the ingestion pipeline.
 
         Args:
-            doc_id: Unique document identifier
-            file_path: Path to document file
-            grade: Grade level (e.g., "S2")
-            subject: Subject (e.g., "biology")
+            doc_id: Document ID
+            file_path: Original file path or key (for type detection)
+            grade: Grade level
+            subject: Subject
+            file_content: Optional raw file bytes (buffered)
+            file_stream: Optional file-like object (streaming)
+            storage_key: Optional object storage key
             title: Optional document title
-            on_progress: Progress callback (stage, percentage)
-            skip_if_exists: Skip if document already ingested
-            ocr_mode: OCR mode ('auto', 'force', 'skip')
-            language: Language for OCR (default: 'eng')
+            on_progress: Optional progress callback
+            ocr_mode: OCR strategy ('auto', 'force', 'skip')
+            language: Document language
+            skip_if_exists: Whether to skip if already exists in store
 
         Returns:
-            Dict with status, doc_id, chunks count, pages count
+            Dict containing pipeline results and telemetry
         """
-        # Create pipeline context
-        ctx = PipelineContext(
-            doc_id=doc_id,
-            file_path=Path(file_path),
-            grade=grade,
-            subject=subject,
-            title=title or Path(file_path).stem,
-            skip_if_exists=skip_if_exists,
-            ocr_mode=ocr_mode,
-            language=language,
-            on_progress=on_progress,
-            settings=self.settings,
-        )
-
         logger.info(f"Starting ingestion pipeline for {doc_id}")
 
         try:
+            # Create context
+            ctx = PipelineContext(
+                doc_id=doc_id,
+                file_path=file_path,
+                grade=grade,
+                subject=subject,
+                file_content=file_content,
+                file_stream=file_stream,
+                storage_key=storage_key,
+                title=title,
+                on_progress=on_progress,
+                ocr_mode=ocr_mode,
+                language=language,
+                settings=self.settings,
+                skip_if_exists=skip_if_exists,
+                file_hash=content_hash,
+            )
+
             # Execute stages sequentially
             for stage in self.stages:
                 result = await stage.run(ctx)
@@ -186,10 +197,20 @@ class IngestionOrchestrator:
                 "stage_results": ctx.stage_results,
             }
 
-        except IngestionError:
-            raise
-
         except Exception as e:
             logger.error(f"Ingestion failed: {e}")
             ctx.report_progress(f"Failed: {e}", -1)
+
+            # Update DB status to failed
+            try:
+                from somaai.db.crud import update_document_status
+                from somaai.db.session import async_session_maker
+
+                async with async_session_maker() as session:
+                    await update_document_status(
+                        session, doc_id, "failed", error=str(e)
+                    )
+            except Exception as db_err:
+                logger.error(f"Failed to update failed status in DB: {db_err}")
+
             raise IngestionError(f"Ingestion failed: {e}")
