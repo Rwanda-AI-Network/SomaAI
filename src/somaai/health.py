@@ -20,7 +20,7 @@ async def health_check(response: Response) -> dict:
     """
     health_status: dict[str, Any] = {
         "status": "healthy",
-        "version": settings.version,
+        "version": settings.server.version,
         "components": {"database": "unknown", "qdrant": "unknown"},
     }
 

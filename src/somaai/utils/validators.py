@@ -32,9 +32,11 @@ async def validate_grade(db: AsyncSession, grade: str) -> str:
     grade = grade.upper()
     service = MetaService(db)
     grades = await service.get_grades()
-    valid_ids = {g.id for g in grades} if grades and hasattr(grades[0], "id") else {
-        g["id"] for g in grades
-    }
+    valid_ids = (
+        {g.id for g in grades}
+        if grades and hasattr(grades[0], "id")
+        else {g["id"] for g in grades}
+    )
     if grade not in valid_ids:
         raise HTTPException(
             status_code=422,
@@ -56,12 +58,15 @@ async def validate_subject(db: AsyncSession, subject: str) -> str:
     subject = subject.lower()
     service = MetaService(db)
     subjects = await service.get_subjects()
-    valid_ids = {s.id for s in subjects} if subjects and hasattr(subjects[0], "id") else {
-        s["id"] for s in subjects
-    }
+    valid_ids = (
+        {s.id for s in subjects}
+        if subjects and hasattr(subjects[0], "id")
+        else {s["id"] for s in subjects}
+    )
     if subject not in valid_ids:
+        msg = f"Subject '{subject}' not found. Valid subjects: {sorted(valid_ids)}"
         raise HTTPException(
             status_code=422,
-            detail=f"Subject '{subject}' not found. Valid subjects: {sorted(valid_ids)}",
+            detail=msg,
         )
     return subject

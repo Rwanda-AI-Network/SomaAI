@@ -308,7 +308,7 @@ def get_storage() -> StorageBackend:
     """
     from somaai.settings import settings
 
-    backend = settings.storage_backend.lower()
+    backend = settings.storage.backend.lower()
 
     if backend == "minio":
         from somaai.providers.storage_minio import MinioProvider

@@ -29,7 +29,6 @@ class UserRole(str, Enum):
 # This allows adding new curriculum data via DB insert instead of code deployment.
 
 
-
 class PaginatedResponse(BaseModel, Generic[T]):
     """Generic paginated response wrapper.
 

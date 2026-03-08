@@ -41,11 +41,19 @@ class ConversationService:
 
         # Existence validation (CTO Hardening)
         if not await self.meta_service.check_exists_grade(grade):
-            raise ValueError(f"Invalid grade: {grade}")
+            valid_grades = await self.meta_service.get_grades()
+            grade_list = ", ".join(g.id for g in valid_grades[:10])  # Limit to 10
+            raise ValueError(
+                f"Invalid grade '{grade}'. Valid grades: {grade_list}"
+            )
         if subject != "general" and not await self.meta_service.check_exists_subject(
             subject
         ):
-            raise ValueError(f"Invalid subject: {subject}")
+            valid_subjects = await self.meta_service.get_subjects()
+            subject_list = ", ".join(s.id for s in valid_subjects[:10])  # Limit to 10
+            raise ValueError(
+                f"Invalid subject '{subject}'. Valid subjects: {subject_list}"
+            )
 
         convo = Conversation(
             id=generate_id(),
@@ -83,8 +91,10 @@ class ConversationService:
     ) -> tuple[list[Conversation], str | None]:
         """List conversations for an actor, most recent first."""
         import base64
-        from somaai.db.models import Message
+
         from sqlalchemy import func
+
+        from somaai.db.models import Message
 
         limit = min(limit, 100)
 
@@ -130,13 +140,10 @@ class ConversationService:
             except Exception:
                 pass
 
-        stmt = (
-            stmt.order_by(
-                Conversation.updated_at.desc(),
-                Conversation.id.desc(),
-            )
-            .limit(limit + 1)
-        )
+        stmt = stmt.order_by(
+            Conversation.updated_at.desc(),
+            Conversation.id.desc(),
+        ).limit(limit + 1)
 
         result = await self.db.execute(stmt)
         # rows is list of tuples (Conversation, count)
@@ -182,6 +189,36 @@ class ConversationService:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_detail_for_actor(
+        self,
+        conversation_id: str,
+        actor_id: str,
+    ) -> Conversation | None:
+        """Get conversation detail with message count, if owned by actor."""
+        from sqlalchemy import func
+
+        from somaai.db.models import Message
+
+        stmt = (
+            select(Conversation, func.count(Message.id))
+            .outerjoin(Message)
+            .where(
+                Conversation.id == conversation_id,
+                Conversation.actor_id == actor_id,
+                Conversation.deleted_at.is_(None),
+            )
+            .group_by(Conversation.id)
+        )
+        result = await self.db.execute(stmt)
+        row = result.one_or_none()
+
+        if not row:
+            return None
+
+        convo, count = row
+        convo.message_count = count
+        return convo
+
     async def update_title(
         self,
         conversation_id: str,
@@ -223,5 +260,7 @@ class ConversationService:
 
         convo.deleted_at = kigali_now()
         await self.db.flush()
-        logger.info("Conversation soft-deleted", extra={"conversation_id": conversation_id})
+        logger.info(
+            "Conversation soft-deleted", extra={"conversation_id": conversation_id}
+        )
         return True

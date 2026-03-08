@@ -67,10 +67,10 @@ def get_embeddings(settings: Settings) -> ThreadSafeEmbeddings:
     """
     global _EMBEDDINGS_MODEL
     if _EMBEDDINGS_MODEL is None:
-        if settings.openai_api_key:
+        if settings.llm.openai_api_key:
             logger.info("Creating OpenAI embeddings model")
             inner = OpenAIEmbeddings(
-                api_key=settings.openai_api_key.get_secret_value(),
+                api_key=settings.llm.openai_api_key.get_secret_value(),
                 model="text-embedding-3-small",
             )
         else:
@@ -119,4 +119,3 @@ async def aembed_documents(settings: Settings, texts: list[str]) -> list[list[fl
     """
     model = get_embeddings(settings)
     return await model.aembed_documents(texts)
-

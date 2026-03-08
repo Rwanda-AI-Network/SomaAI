@@ -5,8 +5,6 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
-
-
 class ClassTaught(BaseModel):
     """A class (grade + subject combination) taught by a teacher."""
 

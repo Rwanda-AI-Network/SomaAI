@@ -80,29 +80,19 @@ class TestConversationCRUD:
         assert resp.status_code == 200
         assert resp.json()["conversations"] == []
 
-    def test_list_returns_own_conversations(
-        self, client: TestClient
-    ):
-        c1 = _create_conversation(
-            client, grade="S1", subject="science"
-        )
-        c2 = _create_conversation(
-            client, grade="S2", subject="mathematics"
-        )
+    def test_list_returns_own_conversations(self, client: TestClient):
+        c1 = _create_conversation(client, grade="S1", subject="science")
+        c2 = _create_conversation(client, grade="S2", subject="mathematics")
 
         resp = client.get("/api/v1/chat/conversations")
-        ids = [
-            c["id"] for c in resp.json()["conversations"]
-        ]
+        ids = [c["id"] for c in resp.json()["conversations"]]
         assert c1["id"] in ids
         assert c2["id"] in ids
 
-    def test_list_ordered_by_most_recent(
-        self, client: TestClient
-    ):
+    def test_list_ordered_by_most_recent(self, client: TestClient):
         """Most recently active conversations should come first."""
         c1 = _create_conversation(client)
-        c2 = _create_conversation(client, subject="mathematics")
+        _create_conversation(client, subject="mathematics")
 
         # Ask in c1 to make it more recently active
         _ask_in_conversation(client, c1["id"])
@@ -117,16 +107,12 @@ class TestConversationCRUD:
 class TestConversationOwnership:
     """Test ownership checks on ask endpoint."""
 
-    def test_ask_in_own_conversation_succeeds(
-        self, client: TestClient
-    ):
+    def test_ask_in_own_conversation_succeeds(self, client: TestClient):
         convo = _create_conversation(client)
         data = _ask_in_conversation(client, convo["id"])
         assert data["conversation_id"] == convo["id"]
 
-    def test_ask_in_nonexistent_returns_404(
-        self, client: TestClient
-    ):
+    def test_ask_in_nonexistent_returns_404(self, client: TestClient):
         resp = client.post(
             "/api/v1/chat/conversations/fake-id-12345/ask",
             json={
@@ -140,9 +126,7 @@ class TestConversationOwnership:
 class TestAutoTitle:
     """Test that first message auto-titles the conversation."""
 
-    def test_first_message_updates_title(
-        self, client: TestClient
-    ):
+    def test_first_message_updates_title(self, client: TestClient):
         convo = _create_conversation(client)
         assert convo["title"] == "New Chat"
 
@@ -154,31 +138,118 @@ class TestAutoTitle:
 
         resp = client.get("/api/v1/chat/conversations")
         updated = next(
-            c
-            for c in resp.json()["conversations"]
-            if c["id"] == convo["id"]
+            c for c in resp.json()["conversations"] if c["id"] == convo["id"]
         )
         assert updated["title"] == "How does gravity work?"
 
-    def test_second_message_does_not_change_title(
-        self, client: TestClient
-    ):
+    def test_second_message_does_not_change_title(self, client: TestClient):
         convo = _create_conversation(client)
 
-        _ask_in_conversation(
-            client, convo["id"], question="First question"
-        )
-        _ask_in_conversation(
-            client, convo["id"], question="Second question"
-        )
+        _ask_in_conversation(client, convo["id"], question="First question")
+        _ask_in_conversation(client, convo["id"], question="Second question")
 
         resp = client.get("/api/v1/chat/conversations")
         updated = next(
-            c
-            for c in resp.json()["conversations"]
-            if c["id"] == convo["id"]
+            c for c in resp.json()["conversations"] if c["id"] == convo["id"]
         )
         assert updated["title"] == "First question"
+
+    def test_auto_title_truncates_at_80_chars(self, client: TestClient):
+        """Title auto-set from question should be capped at 80 characters."""
+        convo = _create_conversation(client)
+        long_question = "A" * 120  # Way over 80 chars
+
+        _ask_in_conversation(client, convo["id"], question=long_question)
+
+        resp = client.get("/api/v1/chat/conversations")
+        updated = next(
+            c for c in resp.json()["conversations"] if c["id"] == convo["id"]
+        )
+        assert len(updated["title"]) <= 80
+
+
+class TestMessageCountAndConfidence:
+    """Verify response fields that were previously untested."""
+
+    def test_message_count_increments(self, client: TestClient):
+        """message_count on conversation should reflect actual messages."""
+        convo = _create_conversation(client)
+
+        # Before asking: message_count should be 0
+        resp = client.get(f"/api/v1/chat/conversations/{convo['id']}")
+        assert resp.json()["message_count"] == 0
+
+        _ask_in_conversation(client, convo["id"], question="Question 1")
+        resp = client.get(f"/api/v1/chat/conversations/{convo['id']}")
+        assert resp.json()["message_count"] == 1
+
+        _ask_in_conversation(client, convo["id"], question="Question 2")
+        resp = client.get(f"/api/v1/chat/conversations/{convo['id']}")
+        assert resp.json()["message_count"] == 2
+
+    def test_confidence_field_present_in_response(self, client: TestClient):
+        """ChatResponse and MessageResponse should carry confidence (0-1 float)."""
+        convo = _create_conversation(client)
+        ask_data = _ask_in_conversation(client, convo["id"])
+
+        assert "confidence" in ask_data
+        assert isinstance(ask_data["confidence"], (int, float))
+        assert 0.0 <= ask_data["confidence"] <= 1.0
+
+        # Also verify on the individual message retrieval
+        msg_resp = client.get(
+            f"/api/v1/chat/conversations/{convo['id']}/messages/{ask_data['message_id']}"
+        )
+        msg_data = msg_resp.json()
+        assert "confidence" in msg_data
+        assert isinstance(msg_data["confidence"], (int, float))
+
+
+class TestSoftDeleteEdgeCases:
+    """Verify behavior after conversation is deleted."""
+
+    def test_ask_in_deleted_conversation_returns_404(self, client: TestClient):
+        """After soft-deleting, asking should return 404."""
+        convo = _create_conversation(client)
+        # Delete
+        resp = client.delete(f"/api/v1/chat/conversations/{convo['id']}")
+        assert resp.status_code == 204
+
+        # Try to ask in deleted conversation
+        resp = client.post(
+            f"/api/v1/chat/conversations/{convo['id']}/ask",
+            json={"question": "Hello?", "user_role": "student"},
+        )
+        assert resp.status_code == 404
+
+    def test_list_messages_in_deleted_conversation_returns_404(
+        self, client: TestClient
+    ):
+        """After soft-deleting, listing messages should return 404."""
+        convo = _create_conversation(client)
+        _ask_in_conversation(client, convo["id"])
+
+        client.delete(f"/api/v1/chat/conversations/{convo['id']}")
+
+        resp = client.get(f"/api/v1/chat/conversations/{convo['id']}/messages")
+        assert resp.status_code == 404
+
+
+class TestCombinedFilters:
+    """Test grade + subject filters together."""
+
+    def test_combined_grade_and_subject_filter(self, client: TestClient):
+        _create_conversation(client, grade="S1", subject="science")
+        _create_conversation(client, grade="S1", subject="mathematics")
+        _create_conversation(client, grade="S2", subject="science")
+
+        resp = client.get("/api/v1/chat/conversations?grade=S1&subject=science")
+        convos = resp.json()["conversations"]
+        assert len(convos) == 1
+        assert convos[0]["grade"] == "S1"
+        assert convos[0]["subject"] == "science"
+
+
 class TestOptionalSubject:
     """Test creating conversations and asking questions without a subject."""
 
@@ -253,8 +324,7 @@ class TestConversationDetailUpdateDelete:
 
         # Verify 404 on follow-up detail
         assert (
-            client.get(f"/api/v1/chat/conversations/{convo['id']}").status_code
-            == 404
+            client.get(f"/api/v1/chat/conversations/{convo['id']}").status_code == 404
         )
 
         # Verify it's gone from the LIST
@@ -275,8 +345,7 @@ class TestConversationDetailUpdateDelete:
         try:
             # Try to GET c1 as other-actor
             assert (
-                client.get(f"/api/v1/chat/conversations/{c1['id']}").status_code
-                == 404
+                client.get(f"/api/v1/chat/conversations/{c1['id']}").status_code == 404
             )
             # Try to PATCH c1 as other-actor
             assert (
@@ -288,9 +357,7 @@ class TestConversationDetailUpdateDelete:
             )
             # Try to DELETE c1 as other-actor
             assert (
-                client.delete(
-                    f"/api/v1/chat/conversations/{c1['id']}"
-                ).status_code
+                client.delete(f"/api/v1/chat/conversations/{c1['id']}").status_code
                 == 404
             )
         finally:

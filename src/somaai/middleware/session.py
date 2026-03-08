@@ -94,9 +94,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
             # Valid session — hydrate request state
             request.state.actor_id = session_data["actor_id"]
             request.state.session_token = token
-            request.state.is_authenticated = session_data.get(
-                "is_authenticated", False
-            )
+            request.state.is_authenticated = session_data.get("is_authenticated", False)
             request.state.user_id = session_data.get("user_id")
         else:
             # New session needed
@@ -117,7 +115,8 @@ class SessionMiddleware(BaseHTTPMiddleware):
             need_new_cookie = True
 
             logger.debug(
-                "Created new session for actor %s", actor_id,
+                "Created new session for actor %s",
+                actor_id,
                 extra={"actor_id": actor_id},
             )
 

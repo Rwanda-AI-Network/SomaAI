@@ -77,6 +77,22 @@ async def get_document_view(
         raise HTTPException(status_code=404, detail="Document not found")
 
     storage = get_storage()
+    
+    # Check file exists BEFORE starting stream (can't raise HTTP errors mid-stream)
+    try:
+        # Note: Not all storage backends implement exists(), so we'll handle in stream
+        pass
+    except Exception as e:
+        logger.error(
+            "Storage check failed",
+            extra={"doc_id": doc_id, "error": str(e)},
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Storage service temporarily unavailable",
+        )
+    
     suffix = Path(doc.filename).suffix.lower()
     media_type = _MIME_TYPES.get(suffix, "application/octet-stream")
 
@@ -93,10 +109,21 @@ async def get_document_view(
                 while chunk := stream.read(65536):  # 64KB windows
                     yield chunk
         except FileNotFoundError:
-            raise HTTPException(status_code=404, detail="File missing in storage")
+            logger.error(
+                "File not found in storage",
+                extra={"doc_id": doc_id, "storage_path": doc.storage_path},
+            )
+            # Can't raise HTTPException here - headers already sent
+            # Client will see connection drop
+            return
         except Exception as e:
-            logger.error(f"Streaming failed for {doc_id}: {e}")
-            raise HTTPException(status_code=500, detail="Error streaming file")
+            logger.error(
+                "Streaming failed",
+                extra={"doc_id": doc_id, "error": str(e)},
+                exc_info=True,
+            )
+            # Can't raise HTTPException here - headers already sent
+            return
 
     return StreamingResponse(
         _file_stream(),

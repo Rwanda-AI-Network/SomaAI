@@ -27,7 +27,7 @@ async def get_redis_pool():
         from somaai.settings import settings
 
         # Parse Redis URL for jobs database
-        redis_url = settings.redis_jobs_url
+        redis_url = settings.redis.jobs_url
         if "://" in redis_url:
             # Format: redis://host:port/db
             parts = redis_url.split("://")[1]
@@ -44,8 +44,8 @@ async def get_redis_pool():
                 port=port,
                 database=db,
                 password=(
-                    settings.redis_password.get_secret_value()
-                    if settings.redis_password
+                    settings.redis.password.get_secret_value()
+                    if settings.redis.password
                     else None
                 ),
             )
@@ -78,7 +78,7 @@ async def enqueue_job(
     async with async_session_maker() as db:
         await crud.create_job(db, job_id, task_name, payload)
 
-    if settings.queue_backend == "sync":
+    if settings.server.queue_backend == "sync":
         # Sync mode: Execute immediately
         from somaai.jobs.tasks import TASK_REGISTRY
 

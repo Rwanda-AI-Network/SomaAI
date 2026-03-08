@@ -191,6 +191,7 @@ class ResponseCache:
         """Store response in cache.
 
         Only caches high-confidence, grounded responses.
+        Citations are now included in cache for consistency.
         """
         if not self._enabled:
             return
@@ -214,16 +215,20 @@ class ResponseCache:
 
             key = self._make_key(query, grade, subject)
 
-            # Don't cache large fields
+            # Cache the full response including citations
+            # Citations are small (~1KB) and important for transparency
             response_copy = {k: v for k, v in response.items()}
-            response_copy.pop("citations", None)
+
+            # Only remove truly large fields that aren't needed
+            response_copy.pop("chunks_map", None)  # Internal mapping, not needed
+            response_copy.pop("retrieved_chunks", None)  # Debug data, not needed
 
             from somaai.utils.serialization import json_serializer
 
             await redis.setex(
                 key, self.ttl, json.dumps(response_copy, default=json_serializer)
             )
-            logger.info(f"Cached response: {query[:50]}...")
+            logger.info(f"Cached response with citations: {query[:50]}...")
 
         except Exception as e:
             logger.warning(f"Response cache set failed: {e}")

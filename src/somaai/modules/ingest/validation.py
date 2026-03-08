@@ -26,7 +26,15 @@ class ValidationIssue:
 
     severity: str  # "critical", "warning", "info"
     message: str
-    suggestion: str
+    suggestion: str = ""
+    
+    def to_dict(self) -> dict:
+        """Convert to dictionary for serialization."""
+        return {
+            "severity": self.severity,
+            "message": self.message,
+            "suggestion": self.suggestion
+        }
 
 
 @dataclass
@@ -40,10 +48,11 @@ class ValidationReport:
     def log_issues(self) -> None:
         """Log all validation issues."""
         for issue in self.issues:
+            suggestion_text = f" → {issue.suggestion}" if issue.suggestion else ""
             if issue.severity == "critical":
-                logger.error(f"[CRITICAL] {issue.message} - {issue.suggestion}")
+                logger.error(f"[CRITICAL] {issue.message}{suggestion_text}")
             elif issue.severity == "warning":
-                logger.warning(f"[WARNING] {issue.message} - {issue.suggestion}")
+                logger.warning(f"[WARNING] {issue.message}{suggestion_text}")
             else:
                 logger.info(f"[INFO] {issue.message}")
 

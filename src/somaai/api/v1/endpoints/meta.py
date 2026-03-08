@@ -83,7 +83,14 @@ async def create_grade(
     service: MetaService = Depends(_get_meta_service),
 ):
     """Create a new grade level."""
-    return await service.create_grade(grade_in)
+    from somaai.exceptions import ConflictError, ValidationError, conflict_exception, validation_exception
+    
+    try:
+        return await service.create_grade(grade_in)
+    except ConflictError as e:
+        raise conflict_exception(detail=str(e))
+    except ValidationError as e:
+        raise validation_exception(detail=str(e))
 
 
 @router.patch("/grades/{grade_id}", response_model=GradeResponse)
@@ -118,7 +125,14 @@ async def create_subject(
     service: MetaService = Depends(_get_meta_service),
 ):
     """Create a new subject."""
-    return await service.create_subject(subject_in)
+    from somaai.exceptions import ConflictError, ValidationError, conflict_exception, validation_exception
+    
+    try:
+        return await service.create_subject(subject_in)
+    except ConflictError as e:
+        raise conflict_exception(detail=str(e))
+    except ValidationError as e:
+        raise validation_exception(detail=str(e))
 
 
 @router.patch("/subjects/{subject_id}", response_model=SubjectResponse)
@@ -153,7 +167,14 @@ async def create_topic(
     service: MetaService = Depends(_get_meta_service),
 ):
     """Create a new topic."""
-    return await service.create_topic(topic_in)
+    from somaai.exceptions import ConflictError, ValidationError, conflict_exception, validation_exception
+    
+    try:
+        return await service.create_topic(topic_in)
+    except ConflictError as e:
+        raise conflict_exception(detail=str(e))
+    except ValidationError as e:
+        raise validation_exception(detail=str(e))
 
 
 @router.patch("/topics/{topic_id}", response_model=TopicResponse)

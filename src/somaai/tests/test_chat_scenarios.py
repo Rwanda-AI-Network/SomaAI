@@ -138,7 +138,7 @@ class TestChatScenarios:
         assert data["messages"][0]["question"] == "Question 2"  # Newest first
 
     def test_message_history_integrity(self, client: TestClient, mock_convo):
-        """Scenario: Verify history retrieval contains full data (citations + enhancements)."""
+        """Scenario: Verify history retrieval contains full data."""
         # 1. Ask with enhancements to ensure they are saved
         # Note: Citations require actual chunks in DB, so we skip citation validation
         # and focus on enhancements which are stored directly in the message
@@ -155,7 +155,7 @@ class TestChatScenarios:
                             "doc_id": "cell-doc-1",
                             "title": "Biology 101",
                             "page_start": 5,
-                            # No chunk_id - citations won't be saved but that's OK for this test
+                            # No chunk_id - citations won't be saved (OK for test)
                         },
                     }
                 ],

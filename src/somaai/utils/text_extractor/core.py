@@ -193,9 +193,21 @@ class TextExtractor:
                         f"Falling back to OCR."
                     )
 
-                    # Reset stream for retry
-                    if hasattr(stream, "seek"):
-                        stream.seek(0)
+                    # Reset stream for retry - handle non-seekable streams
+                    try:
+                        if hasattr(stream, "seek"):
+                            stream.seek(0)
+                    except (OSError, IOError) as e:
+                        # Stream is not seekable (e.g., HTTP response stream)
+                        # We can't retry with OCR without re-reading the file
+                        logger.error(
+                            f"Cannot fallback to OCR: stream is not seekable ({e}). "
+                            f"Consider buffering the stream before extraction."
+                        )
+                        # Return the original result rather than failing completely
+                        result.metadata["fallback_failed"] = True
+                        result.metadata["fallback_reason"] = str(e)
+                        return result
 
                     # Switch to OCR Strategy
                     ocr_strategy = ExtractorRegistry.get_strategy("ocr")

@@ -1,9 +1,8 @@
 """Chat module service."""
 
 import logging
-
 from datetime import datetime
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from typing import cast
 
 from sqlalchemy import func, select
@@ -19,14 +18,19 @@ from somaai.contracts.chat import (
     ResponseEnhancements,
 )
 from somaai.contracts.common import Sufficiency, UserRole
-from somaai.db.models import Chunk, Document, Message, MessageCitation, TeacherProfile
+from somaai.db.models import (
+    Chunk,
+    Conversation,
+    Message,
+    MessageCitation,
+    TeacherProfile,
+)
 from somaai.modules.chat.citations import get_citation_extractor
 from somaai.modules.chat.context import ContextBuilder
 from somaai.modules.chat.conversation import ConversationService
 from somaai.modules.rag.pipelines import BaseRAGPipeline
 from somaai.utils.ids import generate_id
 from somaai.utils.time import utc_now
-
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +63,7 @@ class ChatService:
     async def ask(
         self,
         data: ChatRequest,
-        conversation: Message,  # Injected already-loaded conversation
+        conversation: Conversation,  # Injected already-loaded conversation
     ) -> ChatResponse:
         """Process a chat message and generate AI response.
 
@@ -118,10 +122,7 @@ class ChatService:
                 exc_info=True,
             )
             rag_result = {
-                "answer": (
-                    "I'm unable to answer right now. "
-                    "Please try again shortly."
-                ),
+                "answer": ("I'm unable to answer right now. Please try again shortly."),
                 "sufficiency": "insufficient",
                 "confidence": 0.0,
                 "citations": [],
@@ -136,7 +137,8 @@ class ChatService:
         raw_analogy = rag_result.get("analogy")
         raw_realworld = rag_result.get("realworld_context")
 
-        # Capture confidence for the DB snapshot (using Decimal for precision)
+        # Use a more conservative ratio for safety
+        # (avg 3.2 chars per token for English/Code)
         conf_val = float(
             Decimal(str(rag_result.get("confidence", 0.0))).quantize(
                 Decimal("0.0001"), rounding=ROUND_HALF_UP
@@ -165,6 +167,18 @@ class ChatService:
         citations_objects = [CitationResponse(**c) for c in citations_dicts]
         chunks_map = rag_result.get("chunks_map", {})
 
+        # Validate citation data before saving
+        if citations_objects and not chunks_map:
+            logger.warning(
+                "Citations generated but chunks_map is empty - "
+                "citations will not be saved",
+                extra={
+                    "message_id": message_id,
+                    "citation_count": len(citations_objects),
+                    "conversation_id": conversation_id,
+                },
+            )
+
         await self.citation_manager.save_citations(
             db=self.db,
             message_id=message_id,
@@ -182,9 +196,7 @@ class ChatService:
         )
         msg_count_result = await self.db.execute(msg_count_stmt)
         if msg_count_result.scalar() == 1:
-            await self.conversation_service.update_title(
-                conversation_id, question[:80]
-            )
+            await self.conversation_service.update_title(conversation_id, question[:80])
 
         # Touch conversation updated_at
         await self.conversation_service.touch(conversation_id)
@@ -292,9 +304,7 @@ class ChatService:
         # Build enhancements block from stored columns
         raw_analogy = cast(str, message.analogy) if message.analogy else None
         raw_realworld = (
-            cast(str, message.realworld_context)
-            if message.realworld_context
-            else None
+            cast(str, message.realworld_context) if message.realworld_context else None
         )
         enhancements = None
         if raw_analogy or raw_realworld:
@@ -354,6 +364,7 @@ class ChatService:
             Tuple of (MessageResponses, next_cursor)
         """
         import base64
+
         from sqlalchemy.orm import joinedload
 
         limit = min(limit, 100)
@@ -361,14 +372,14 @@ class ChatService:
         # Base query
         stmt = (
             select(Message)
+            .where(
+                Message.conversation_id == conversation_id,
+                Message.actor_id == self.actor_id,
+            )
             .options(
                 joinedload(Message.citations)
                 .joinedload(MessageCitation.chunk)
                 .joinedload(Chunk.document)
-            )
-            .where(
-                Message.conversation_id == conversation_id,
-                Message.actor_id == self.actor_id,
             )
         )
 
@@ -377,11 +388,18 @@ class ChatService:
                 decoded = base64.b64decode(cursor).decode()
                 ref_ts = datetime.fromisoformat(decoded)
                 stmt = stmt.where(Message.created_at < ref_ts)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(
+                    "Invalid pagination cursor, returning first page",
+                    extra={
+                        "cursor": cursor[:20] + "..." if len(cursor) > 20 else cursor,
+                        "error": str(e),
+                        "conversation_id": conversation_id,
+                    },
+                )
+                # Continue without cursor filter (returns first page)
 
         # Order by created_at DESC (recent first) for pagination
-        # Frontend can reverse for UI display
         stmt = stmt.order_by(Message.created_at.desc()).limit(limit + 1)
 
         result = await self.db.execute(stmt)
@@ -390,23 +408,16 @@ class ChatService:
         has_next = len(rows) > limit
         page_messages = rows[:limit]
 
-        # Convert to responses (reusing get_message logic if possible, or manual mapping)
+        # Batch load citations for all messages in one query (performance optimization)
+        message_ids = [msg.id for msg in page_messages]
+        citations_by_message = await self.citation_manager.get_citations_batch(
+            self.db, message_ids
+        )
+
         responses = []
         for msg in page_messages:
-            # Map citations
-            citations = [
-                CitationResponse(
-                    doc_id=c.chunk.document_id,
-                    doc_title=c.chunk.document.title,
-                    section_title=None,
-                    page_start=c.chunk.page_start,
-                    page_end=c.chunk.page_end,
-                    chunk_preview=c.snippet or "",
-                    view_url="",  # Placeholder
-                    relevance_score=c.relevance_score or 0.0,
-                )
-                for c in msg.citations
-            ]
+            # Get pre-loaded citations from batch
+            citations = citations_by_message.get(msg.id, [])
 
             # Map enhancements
             enhancements = None
@@ -446,7 +457,7 @@ class ChatService:
         conversation: Message,
     ):
         """Streaming version of ask (v2).
-        
+
         This is a placeholder for future Server-Sent Events (SSE) support.
         Yields chunks of the response.
         """

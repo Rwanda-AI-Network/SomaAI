@@ -48,6 +48,9 @@ class ContextBuilder:
         chronological order. Stops adding turns when the budget is
         exhausted.
 
+        Performance optimization: Dynamically calculates row limit based
+        on token budget to avoid loading unnecessary messages.
+
         Args:
             conversation_id: Conversation to load history for
             actor_id: Actor who must own the conversation (security)
@@ -59,7 +62,12 @@ class ContextBuilder:
         if not conversation_id:
             return ""
 
-        # Fetch messages newest-first
+        # Performance optimization: Calculate estimated rows needed
+        # Average message: ~100 tokens (question + answer)
+        # Add 20% buffer for variation
+        estimated_rows = min(int((max_tokens / 100) * 1.2) + 2, 50)
+
+        # Fetch messages newest-first, with dynamic limit
         stmt = (
             select(Message)
             .where(
@@ -67,6 +75,7 @@ class ContextBuilder:
                 Message.actor_id == actor_id,
             )
             .order_by(Message.created_at.desc())
+            .limit(estimated_rows)
         )
         result = await self.db.execute(stmt)
         messages = list(result.scalars().all())
@@ -103,13 +112,15 @@ class ContextBuilder:
         history = "\n".join(lines)
 
         logger.debug(
-            "Built history: %d turns, ~%d tokens",
+            "Built history: %d turns, ~%d tokens (loaded %d messages)",
             len(selected),
             tokens_used,
+            len(messages),
             extra={
                 "conversation_id": conversation_id,
                 "turns": len(selected),
                 "tokens_estimated": tokens_used,
+                "messages_loaded": len(messages),
             },
         )
 

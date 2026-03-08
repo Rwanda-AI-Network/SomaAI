@@ -47,6 +47,7 @@ dependencies = [
     "tenacity>=8.0.0",
     "xxhash>=3.0.0",
     "minio>=7.2.0",
+    "smart-open[s3]>=7.0.0",  # Production-grade streaming for S3/MinIO
 ]
 
 [project.optional-dependencies]
@@ -164,6 +165,7 @@ disallow_untyped_defs = false
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 testpaths = ["src/somaai/tests"]
+pythonpath = ["src"]
 filterwarnings = [
     "ignore::RuntimeWarning:somaai.modules.meta.service:337",
     "ignore:coroutine.*was never awaited:RuntimeWarning",

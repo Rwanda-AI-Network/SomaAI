@@ -104,14 +104,14 @@ async def _invalidate_l2() -> None:
         from somaai.utils.redis import get_cache_redis
 
         redis = await get_cache_redis()
-        
+
         # Check if scan_iter is a mock (tests) or real Redis
         scan_iter = redis.scan_iter(match=f"{_L2_PREFIX}*")
-        
+
         # If it's a mock, it won't have __aiter__, skip gracefully
         if not hasattr(scan_iter, '__aiter__'):
             return
-        
+
         keys = [k async for k in scan_iter]
         if keys:
             await redis.delete(*keys)
@@ -167,6 +167,9 @@ class MetaService:
         cache_key = f"grades:only_docs={only_with_docs}"
         cached = await _get_cached(cache_key)
         if cached is not None:
+            # Deserialize from cache (dicts → Pydantic models)
+            if cached and isinstance(cached[0], dict):
+                return [GradeResponse(**g) for g in cached]
             return cached
 
         if only_with_docs:
@@ -209,6 +212,9 @@ class MetaService:
         cache_key = f"subjects:grade={grade}:only_docs={only_with_docs}"
         cached = await _get_cached(cache_key)
         if cached is not None:
+            # Deserialize from cache (dicts → Pydantic models)
+            if cached and isinstance(cached[0], dict):
+                return [SubjectResponse(**s) for s in cached]
             return cached
 
         if only_with_docs:
@@ -254,6 +260,9 @@ class MetaService:
         cache_key = f"topics:{grade}:{subject}"
         cached = await _get_cached(cache_key)
         if cached is not None:
+            # Deserialize from cache (dicts → Pydantic models)
+            if cached and isinstance(cached[0], dict):
+                return [TopicResponse(**t) for t in cached]
             return cached
 
         topics = await crud.get_topics_by_grade_subject(self.db, grade, subject)
@@ -337,7 +346,11 @@ class MetaService:
         await _invalidate_l2()  # L2 — async, best-effort
 
     async def create_grade(self, grade_in: GradeCreate) -> GradeResponse:
-        """Create a new grade and invalidate cache."""
+        """Create a new grade and invalidate cache.
+        
+        Raises:
+            ConflictError: If grade with same ID already exists
+        """
         from somaai.utils.meta import normalize_grade
 
         # Enforce canonical normalization on write
@@ -378,7 +391,11 @@ class MetaService:
         return success
 
     async def create_subject(self, subject_in: SubjectCreate) -> SubjectResponse:
-        """Create a new subject and invalidate cache."""
+        """Create a new subject and invalidate cache.
+        
+        Raises:
+            ConflictError: If subject with same ID already exists
+        """
         from somaai.utils.meta import normalize_subject
 
         # Enforce canonical normalization on write
@@ -419,7 +436,11 @@ class MetaService:
         return success
 
     async def create_topic(self, topic_in: TopicCreate) -> TopicResponse:
-        """Create a new topic and invalidate cache."""
+        """Create a new topic and invalidate cache.
+        
+        Raises:
+            ConflictError: If topic with same ID already exists
+        """
         import uuid
 
         topic_id = str(uuid.uuid4())

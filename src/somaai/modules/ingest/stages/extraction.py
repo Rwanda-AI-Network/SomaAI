@@ -271,29 +271,97 @@ class ExtractionStage(PipelineStage):
         return self._extractor
 
     async def execute(self, ctx: PipelineContext) -> StageResult:
-        """Extract and sanitize document.
+        """Extract and sanitize document with production-grade streaming.
 
         Flow:
-        1. Extract with text_extractor (handles OCR fallback internally)
-        2. Sanitize result (encoding, whitespace, artifacts)
-        3. Validate quality
-        4. Store in context
+        1. Create managed stream using factory (auto-detects source)
+        2. Ensure seekable (smart adapter selection)
+        3. Extract with text_extractor
+        4. Sanitize result
+        5. Validate quality
+        6. Store in context
+        7. Automatic cleanup via context manager
         """
         self._report_progress(ctx, "Extracting document", 0.1)
 
         try:
-            # STEP 1: Extract using text_extractor
-            # text_extractor handles: strategy selection, OCR fallback
-            # Run in thread pool to avoid blocking event loop
-            # Priority: stream > content > path
-            input_data = ctx.file_stream or ctx.file_content or ctx.file_path
-
-            raw_result = await asyncio.to_thread(
-                self.extractor,
-                input_data=input_data,
-                ocr_mode=ctx.ocr_mode,
-                language=ctx.language,
-            )
+            from somaai.utils.text_extractor.streaming import StreamFactory
+            
+            # STEP 1: Create managed stream from any source
+            # Factory auto-detects: S3, local file, bytes, HTTP
+            if ctx.storage_key:
+                # S3/MinIO file - use factory with storage backend
+                from somaai.settings import settings
+                
+                managed_stream = await StreamFactory.create_from_storage(
+                    storage_key=ctx.storage_key,
+                    backend=settings.storage.backend,
+                    bucket=(
+                        settings.storage.minio_bucket
+                        if settings.storage.backend == "minio"
+                        else settings.storage.s3_bucket
+                    ),
+                    endpoint=(
+                        f"{'https' if settings.storage.minio_secure else 'http'}://{settings.storage.minio_endpoint}"
+                        if settings.storage.backend == "minio"
+                        else None
+                    ),
+                    access_key=(
+                        settings.storage.minio_access_key
+                        if settings.storage.backend == "minio"
+                        else settings.storage.s3_access_key
+                    ),
+                    secret_key=(
+                        settings.storage.minio_secret_key.get_secret_value()
+                        if settings.storage.backend == "minio"
+                        else (
+                            settings.storage.s3_secret_key.get_secret_value()
+                            if settings.storage.s3_secret_key
+                            else None
+                        )
+                    ),
+                    doc_id=ctx.doc_id,
+                    ensure_seekable=True,  # Auto-adapt if needed
+                )
+            
+            elif ctx.file_content:
+                # Bytes in memory
+                managed_stream = await StreamFactory.create(
+                    source=ctx.file_content,
+                    doc_id=ctx.doc_id,
+                    ensure_seekable=True,
+                )
+            
+            elif ctx.file_stream:
+                # Existing stream - wrap it (less common path)
+                # For now, read into bytes and use factory
+                logger.debug("Converting existing stream to managed stream")
+                data = await asyncio.to_thread(ctx.file_stream.read)
+                managed_stream = await StreamFactory.create(
+                    source=data,
+                    doc_id=ctx.doc_id,
+                    ensure_seekable=True,
+                )
+            
+            else:
+                # Local file
+                managed_stream = await StreamFactory.create(
+                    source=ctx.file_path,
+                    doc_id=ctx.doc_id,
+                    ensure_seekable=True,
+                )
+            
+            # STEP 2: Use context manager for guaranteed cleanup
+            async with managed_stream as stream:
+                # STEP 3: Extract using text_extractor
+                raw_result = await asyncio.to_thread(
+                    self.extractor,
+                    input_data=stream.stream,  # Pass the managed stream
+                    ocr_mode=ctx.ocr_mode,
+                    language=ctx.language,
+                )
+            
+            # Stream automatically cleaned up here (even on exceptions)
 
             self._report_progress(ctx, "Sanitizing extracted content", 0.5)
 
@@ -308,9 +376,23 @@ class ExtractionStage(PipelineStage):
                 self.validator.validate, sanitized_result
             )
 
+            # Always log issues (warnings and errors)
+            validation.log_issues()
+
             if not validation.passed:
-                validation.log_issues()
-                raise ExtractionValidationError(validation.issues)
+                # Convert ValidationIssue objects to dicts for better error messages
+                issue_dicts = []
+                for issue in validation.issues:
+                    if hasattr(issue, 'to_dict'):
+                        issue_dicts.append(issue.to_dict())
+                    else:
+                        issue_dicts.append({
+                            'severity': getattr(issue, 'severity', 'error'),
+                            'message': getattr(issue, 'message', str(issue)),
+                            'suggestion': getattr(issue, 'suggestion', '')
+                        })
+                
+                raise ExtractionValidationError(issue_dicts)
 
             validation.log_issues()  # Log warnings
 

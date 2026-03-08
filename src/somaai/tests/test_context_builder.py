@@ -29,10 +29,7 @@ class TestEstimateTokens:
         assert self._estimate_tokens(text) == 25  # 100 / 4
 
     def test_realistic_sentence(self):
-        text = (
-            "What are the three pillars of "
-            "Rwanda Vision 2050?"
-        )
+        text = "What are the three pillars of Rwanda Vision 2050?"
         tokens = self._estimate_tokens(text)
         # ~50 chars => ~12 tokens (reasonable for English)
         assert 10 <= tokens <= 15
@@ -56,9 +53,7 @@ class TestContextBuilder:
         return self._make_builder(mock_db)
 
     @pytest.mark.asyncio
-    async def test_empty_conversation_returns_empty(
-        self, builder, mock_db
-    ):
+    async def test_empty_conversation_returns_empty(self, builder, mock_db):
         """No messages should return empty string."""
         mock_result = MagicMock()
         mock_result.scalars.return_value.all.return_value = []
@@ -71,9 +66,7 @@ class TestContextBuilder:
         assert history == ""
 
     @pytest.mark.asyncio
-    async def test_none_conversation_returns_empty(
-        self, builder
-    ):
+    async def test_none_conversation_returns_empty(self, builder):
         """Empty conversation_id should return empty string."""
         history = await builder.build_history(
             conversation_id="",
@@ -82,9 +75,7 @@ class TestContextBuilder:
         assert history == ""
 
     @pytest.mark.asyncio
-    async def test_builds_chronological_history(
-        self, builder, mock_db
-    ):
+    async def test_builds_chronological_history(self, builder, mock_db):
         """Messages should be returned in chronological order."""
         # Simulate 2 messages (returned newest-first by query)
         msg1 = MagicMock()
@@ -118,9 +109,7 @@ class TestContextBuilder:
         assert lines[3] == "Assistant: Second answer"
 
     @pytest.mark.asyncio
-    async def test_respects_token_budget(
-        self, builder, mock_db
-    ):
+    async def test_respects_token_budget(self, builder, mock_db):
         """Should stop adding turns when budget is exhausted."""
         # Create messages with ~200 chars each turn
         messages = []
@@ -132,9 +121,7 @@ class TestContextBuilder:
             messages.append(msg)
 
         mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = (
-            list(reversed(messages))
-        )
+        mock_result.scalars.return_value.all.return_value = list(reversed(messages))
         mock_db.execute.return_value = mock_result
 
         # Small budget: should only fit 1-2 turns

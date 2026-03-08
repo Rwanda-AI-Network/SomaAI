@@ -12,6 +12,12 @@ from fastapi.testclient import TestClient
 from somaai.app import create_app
 
 
+def pytest_configure(config):
+    """Set environment variables before any test imports happen."""
+    os.environ["SOMAAI_ENV"] = "test"
+    os.environ["SOMAAI_LLM__BACKEND"] = "mock"
+
+
 @pytest.fixture(scope="function", autouse=True)
 def _seed_test_metadata(request):
     """Seed baseline metadata for all tests except meta tests."""
@@ -98,12 +104,12 @@ def _seed_test_metadata(request):
     yield
 
 
-@pytest.fixture(autouse=True)
-def _set_testing_env():
-    """Set TESTING=1 so factory allows mock backend."""
-    os.environ["TESTING"] = "1"
+@pytest.fixture(scope="session", autouse=True)
+def _cleanup_test_env():
+    """Clean up test environment variables after session."""
     yield
-    os.environ.pop("TESTING", None)
+    os.environ.pop("SOMAAI_ENV", None)
+    os.environ.pop("SOMAAI_LLM__BACKEND", None)
 
 
 @pytest.fixture(autouse=True)
@@ -124,7 +130,7 @@ def _clear_session_store():
 def client():
     """Create test client with mock LLM backend.
 
-    Uses llm_backend="mock" which is allowed in tests due to TESTING=1.
+    Uses llm_backend="mock" which is allowed in tests due to SOMAAI_ENV=test.
     The RAGPipeline will be created (not MockRAGPipeline) but will use
     MockLLMProvider for generation.
 
@@ -138,7 +144,8 @@ def client():
     app = create_app()
 
     def get_test_settings():
-        return Settings(llm_backend="mock")
+        from somaai.settings import LLMSettings
+        return Settings(llm=LLMSettings(backend="mock"))
 
     app.dependency_overrides[get_settings] = get_test_settings
 
@@ -149,9 +156,15 @@ def client():
             "somaai.modules.rag.retriever.Retriever.retrieve",
             new_callable=AsyncMock,
         ) as mock_retrieve,
-        patch("somaai.utils.redis.get_cache_redis", new_callable=AsyncMock) as mock_redis_cache,
-        patch("somaai.utils.redis.get_general_redis", new_callable=AsyncMock) as mock_redis_gen,
-        patch("somaai.utils.redis.get_jobs_redis", new_callable=AsyncMock) as mock_redis_jobs,
+        patch(
+            "somaai.utils.redis.get_cache_redis", new_callable=AsyncMock
+        ) as mock_redis_cache,
+        patch(
+            "somaai.utils.redis.get_general_redis", new_callable=AsyncMock
+        ) as mock_redis_gen,
+        patch(
+            "somaai.utils.redis.get_jobs_redis", new_callable=AsyncMock
+        ) as mock_redis_jobs,
         patch("somaai.health.get_qdrant_client") as mock_qdrant_client_func,
     ):
         # Setup Redis mock behavior (mimic empty/down Redis for most tests)
@@ -159,7 +172,7 @@ def client():
             """Empty async iterator for scan_iter mock."""
             if False:  # Never execute, just make it an async generator
                 yield
-        
+
         for m in [mock_redis_cache, mock_redis_gen, mock_redis_jobs]:
             redis_inst = AsyncMock()
             redis_inst.get.return_value = None
@@ -167,7 +180,7 @@ def client():
             redis_inst.delete.return_value = True
             # scan_iter should return an async iterator
             redis_inst.scan_iter.return_value = _async_iter_empty()
-            # Make the mock return the redis_inst directly (not wrapped in another coroutine)
+            # Make the mock return the redis_inst directly
             m.return_value = redis_inst
 
         mock_store = MagicMock()

@@ -422,7 +422,7 @@ class TestMetaCache:
         assert _run(_get_cached("expired")) is None
         assert "expired" not in _cache  # Cleaned up
 
-    def test_invalidate_clears_all(self):
+    def test_invalidate_clears_all(self, client: TestClient):
         """invalidate_meta_cache removes all entries."""
         _run(_set_cached("a", 1))
         _run(_set_cached("b", 2))

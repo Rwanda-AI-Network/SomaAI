@@ -38,9 +38,7 @@ def _ask_in_conversation(
 class TestConversationCreation:
     """Test POST /api/v1/chat/conversations."""
 
-    def test_create_conversation_returns_201(
-        self, client: TestClient
-    ):
+    def test_create_conversation_returns_201(self, client: TestClient):
         data = _create_conversation(client)
         assert "id" in data
         assert data["title"] == "New Chat"
@@ -49,15 +47,9 @@ class TestConversationCreation:
         assert "created_at" in data
         assert "updated_at" in data
 
-    def test_create_multiple_conversations(
-        self, client: TestClient
-    ):
-        c1 = _create_conversation(
-            client, grade="S1", subject="science"
-        )
-        c2 = _create_conversation(
-            client, grade="S2", subject="mathematics"
-        )
+    def test_create_multiple_conversations(self, client: TestClient):
+        c1 = _create_conversation(client, grade="S1", subject="science")
+        c2 = _create_conversation(client, grade="S2", subject="mathematics")
         assert c1["id"] != c2["id"]
 
     def test_list_conversations(self, client: TestClient):
@@ -72,9 +64,7 @@ class TestConversationCreation:
         assert data.get("next_cursor") is None
         assert len(data["conversations"]) >= 2
 
-    def test_list_conversations_pagination_defaults(
-        self, client: TestClient
-    ):
+    def test_list_conversations_pagination_defaults(self, client: TestClient):
         resp = client.get("/api/v1/chat/conversations?limit=1")
         assert resp.status_code == 200
         data = resp.json()
@@ -84,9 +74,7 @@ class TestConversationCreation:
 class TestAskQuestion:
     """Test POST /api/v1/chat/conversations/{id}/ask."""
 
-    def test_ask_returns_required_fields(
-        self, client: TestClient
-    ):
+    def test_ask_returns_required_fields(self, client: TestClient):
         convo = _create_conversation(client)
         data = _ask_in_conversation(client, convo["id"])
 
@@ -106,17 +94,15 @@ class TestAskQuestion:
         assert data["sufficiency"] == "insufficient"
         assert isinstance(data["citations"], list)
 
-    def test_ask_enhancements_field_present(
-        self, client: TestClient
-    ):
+    def test_ask_enhancements_field_present(self, client: TestClient):
         convo = _create_conversation(client)
         data = _ask_in_conversation(client, convo["id"])
         # enhancements may be absent (None stripped) or present as an object
-        assert data.get("enhancements") is None or isinstance(data["enhancements"], dict)
+        assert data.get("enhancements") is None or isinstance(
+            data["enhancements"], dict
+        )
 
-    def test_ask_in_nonexistent_conversation_returns_404(
-        self, client: TestClient
-    ):
+    def test_ask_in_nonexistent_conversation_returns_404(self, client: TestClient):
         resp = client.post(
             "/api/v1/chat/conversations/nonexistent-id/ask",
             json={
@@ -126,9 +112,7 @@ class TestAskQuestion:
         )
         assert resp.status_code == 404
 
-    def test_ask_auto_titles_on_first_message(
-        self, client: TestClient
-    ):
+    def test_ask_auto_titles_on_first_message(self, client: TestClient):
         convo = _create_conversation(client)
         _ask_in_conversation(
             client,
@@ -139,14 +123,10 @@ class TestAskQuestion:
         # List conversations and check title was updated
         resp = client.get("/api/v1/chat/conversations")
         convos = resp.json()["conversations"]
-        updated = next(
-            c for c in convos if c["id"] == convo["id"]
-        )
+        updated = next(c for c in convos if c["id"] == convo["id"])
         assert updated["title"] == "What is photosynthesis?"
 
-    def test_ask_empty_question_returns_422(
-        self, client: TestClient
-    ):
+    def test_ask_empty_question_returns_422(self, client: TestClient):
         convo = _create_conversation(client)
         resp = client.post(
             f"/api/v1/chat/conversations/{convo['id']}/ask",
@@ -162,9 +142,7 @@ class TestAskQuestion:
 class TestMessageRetrieval:
     """Test GET endpoints for messages and citations."""
 
-    def test_get_message_returns_details(
-        self, client: TestClient
-    ):
+    def test_get_message_returns_details(self, client: TestClient):
         convo = _create_conversation(client)
         ask_data = _ask_in_conversation(client, convo["id"])
         message_id = ask_data["message_id"]
@@ -180,11 +158,11 @@ class TestMessageRetrieval:
         assert data["user_role"] == "student"
         assert isinstance(data["citations"], list)
         # MessageResponse carries the enhancements block (absent when None)
-        assert data.get("enhancements") is None or isinstance(data["enhancements"], dict)
+        assert data.get("enhancements") is None or isinstance(
+            data["enhancements"], dict
+        )
 
-    def test_get_nonexistent_message_returns_404(
-        self, client: TestClient
-    ):
+    def test_get_nonexistent_message_returns_404(self, client: TestClient):
         convo = _create_conversation(client)
         resp = client.get(
             f"/api/v1/chat/conversations/{convo['id']}/messages/nonexistent-id",
@@ -202,9 +180,7 @@ class TestMessageRetrieval:
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
 
-    def test_get_citations_nonexistent_message_returns_404(
-        self, client: TestClient
-    ):
+    def test_get_citations_nonexistent_message_returns_404(self, client: TestClient):
         convo = _create_conversation(client)
         resp = client.get(
             f"/api/v1/chat/conversations/{convo['id']}/messages/nonexistent-id/citations",
@@ -231,9 +207,7 @@ class TestMessageRetrieval:
 class TestOptionalSubject:
     """Test chat flow with optional subject."""
 
-    def test_ask_without_subject_resolves_general(
-        self, client: TestClient
-    ):
+    def test_ask_without_subject_resolves_general(self, client: TestClient):
         # Create without subject (defaults to "general" server-side)
         convo = client.post(
             "/api/v1/chat/conversations",
@@ -254,7 +228,9 @@ class TestOptionalSubject:
 
         # Retrieve message and verify it saved correctly
         msg_id = data["message_id"]
-        msg_resp = client.get(f"/api/v1/chat/conversations/{convo_id}/messages/{msg_id}")
+        msg_resp = client.get(
+            f"/api/v1/chat/conversations/{convo_id}/messages/{msg_id}"
+        )
         assert msg_resp.status_code == 200
         msg_data = msg_resp.json()
         assert "message_id" in msg_data
@@ -263,9 +239,7 @@ class TestOptionalSubject:
 class TestPreferences:
     """Test the Enhancement enum and Preferences contract."""
 
-    def test_ask_with_empty_enhancements_list(
-        self, client: TestClient
-    ):
+    def test_ask_with_empty_enhancements_list(self, client: TestClient):
         """Passing [] disables all enhancements."""
         convo = _create_conversation(client)
         resp = client.post(
@@ -277,9 +251,7 @@ class TestPreferences:
         )
         assert resp.status_code == 201
 
-    def test_ask_with_analogy_only(
-        self, client: TestClient
-    ):
+    def test_ask_with_analogy_only(self, client: TestClient):
         """Passing a specific enhancement list is accepted."""
         convo = _create_conversation(client)
         resp = client.post(

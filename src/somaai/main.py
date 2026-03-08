@@ -10,7 +10,7 @@ app = create_app()
 if __name__ == "__main__":
     uvicorn.run(
         "somaai.main:app",
-        host=settings.host,
-        port=settings.port,
-        reload=settings.debug,
+        host=settings.server.host,
+        port=settings.server.port,
+        reload=settings.server.debug,
     )

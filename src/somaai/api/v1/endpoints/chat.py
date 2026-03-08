@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,11 +14,10 @@ from somaai.contracts.chat import (
     ConversationListResponse,
     ConversationResponse,
     CreateConversationRequest,
-    UpdateConversationRequest,
-    MessageResponse,
     MessageListResponse,
+    MessageResponse,
+    UpdateConversationRequest,
 )
-
 from somaai.db.session import get_session
 from somaai.deps import get_actor_id, get_chat_service
 from somaai.exceptions import not_found_exception
@@ -61,7 +60,7 @@ router = APIRouter(prefix="/chat/conversations", tags=["chat"])
     response_model=ConversationResponse,
     status_code=201,
 )
-@_rate_limit(settings.rate_limit_create_conversation)
+@_rate_limit(settings.security.rate_limit_create_conversation)
 async def create_conversation(
     request: Request,
     data: CreateConversationRequest,
@@ -86,6 +85,7 @@ async def create_conversation(
         title=convo.title,
         grade=convo.grade,
         subject=convo.subject,
+        message_count=getattr(convo, "message_count", 0),  # Use getattr with default
         created_at=convo.created_at,
         updated_at=convo.updated_at,
     )
@@ -131,7 +131,7 @@ async def get_conversation(
 ) -> ConversationResponse:
     """Retrieve a single conversation."""
     service = ConversationService(db)
-    convo = await service.get_owned(id, actor_id)
+    convo = await service.get_detail_for_actor(id, actor_id)
     if not convo:
         raise HTTPException(
             status_code=404, detail="Conversation not found or not owned"
@@ -142,7 +142,7 @@ async def get_conversation(
         title=convo.title,
         grade=convo.grade,
         subject=convo.subject,
-        message_count=getattr(convo, "message_count", 0),
+        message_count=convo.message_count,
         created_at=convo.created_at,
         updated_at=convo.updated_at,
     )
@@ -157,6 +157,8 @@ async def update_conversation(
 ) -> ConversationResponse:
     """Update conversation title."""
     service = ConversationService(db)
+    # Check ownership first using get_owned (we only need detailed
+    # response at the end)
     convo = await service.get_owned(id, actor_id)
     if not convo:
         raise HTTPException(
@@ -165,16 +167,23 @@ async def update_conversation(
 
     await service.update_title(id, data.title)
     await db.commit()
-    await db.refresh(convo)
+
+    # Get updated detail with count
+    updated = await service.get_detail_for_actor(id, actor_id)
+    if not updated:
+        # Should theoretically not happen if refresh succeeds
+        raise HTTPException(
+            status_code=404, detail="Conversation not found after update"
+        )
 
     return ConversationResponse(
-        id=convo.id,
-        title=convo.title,
-        grade=convo.grade,
-        subject=convo.subject,
-        message_count=getattr(convo, "message_count", 0),
-        created_at=convo.created_at,
-        updated_at=convo.updated_at,
+        id=updated.id,
+        title=updated.title,
+        grade=updated.grade,
+        subject=updated.subject,
+        message_count=updated.message_count,
+        created_at=updated.created_at,
+        updated_at=updated.updated_at,
     )
 
 
@@ -212,7 +221,7 @@ async def list_messages(
     convo_service = ConversationService(db)
     convo = await convo_service.get_owned(conversation_id, actor_id)
     if not convo:
-        raise not_found_exception(f"Conversation {conversation_id} not found")
+        raise not_found_exception("Conversation not found")
 
     messages, next_cursor = await chat_service.list_messages(
         conversation_id=conversation_id,
@@ -230,7 +239,7 @@ async def list_messages(
     response_model=ChatResponse,
     status_code=201,
 )
-@_rate_limit(settings.rate_limit_ask)
+@_rate_limit(settings.security.rate_limit_ask)
 async def ask_question(
     conversation_id: str,
     data: ChatRequest,
@@ -249,9 +258,7 @@ async def ask_question(
     convo_service = ConversationService(db)
     convo = await convo_service.get_owned(conversation_id, actor_id)
     if not convo:
-        raise not_found_exception(
-            f"Conversation {conversation_id} not found"
-        )
+        raise not_found_exception(f"Conversation {conversation_id} not found")
 
     conv_token = set_conversation_id(conversation_id)
 
@@ -269,9 +276,19 @@ async def ask_question(
                     data=data,
                     conversation=convo,
                 )
+                # Basic validation before committing
+                if not response.message_id:
+                    await db.rollback()
+                    logger.error(
+                        "Response missing message_id",
+                        extra={"conversation_id": conversation_id},
+                    )
+                    raise ValueError("Invalid response: missing message_id")
+
                 await db.commit()
                 return response
         except asyncio.TimeoutError:
+            await db.rollback()  # Explicit rollback
             logger.error(
                 "Chat request timeout",
                 extra={
@@ -281,10 +298,60 @@ async def ask_question(
             )
             raise HTTPException(
                 status_code=504,
-                detail=(
-                    "Request timeout — please try again "
-                    "with a simpler question"
-                ),
+                detail=("Request timeout — please try again with a simpler question"),
+            )
+        except ConnectionError as e:
+            await db.rollback()  # Explicit rollback
+            # Qdrant or external service connection failure
+            error_str = str(e).lower()
+            if "qdrant" in error_str:
+                detail = "Vector search service temporarily unavailable. Please try again shortly."
+            elif "redis" in error_str:
+                detail = "Cache service temporarily unavailable. Please try again shortly."
+            else:
+                detail = "AI service temporarily unavailable. Please try again shortly."
+            
+            logger.error(
+                "External service connection failed",
+                extra={
+                    "actor_id": actor_id,
+                    "conversation_id": conversation_id,
+                    "error": str(e),
+                },
+                exc_info=True,
+            )
+            raise HTTPException(status_code=503, detail=detail)
+        except ValueError as e:
+            # Response validation failed or invalid input
+            await db.rollback()
+            logger.warning(
+                "Validation error in chat request",
+                extra={
+                    "actor_id": actor_id,
+                    "conversation_id": conversation_id,
+                    "error": str(e),
+                },
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=str(e),
+            )
+        except Exception as e:
+            await db.rollback()  # Explicit rollback
+            # Catch-all for unexpected errors
+            logger.error(
+                "Unexpected error in chat request",
+                extra={
+                    "actor_id": actor_id,
+                    "conversation_id": conversation_id,
+                    "error": str(e),
+                },
+                exc_info=True,
+            )
+            # Re-raise as 500 with generic message (don't leak internals)
+            raise HTTPException(
+                status_code=500,
+                detail="An unexpected error occurred. Please try again.",
             )
     finally:
         conversation_id_ctx.reset(conv_token)
@@ -303,14 +370,14 @@ async def ask_question_stream(
     db: AsyncSession = Depends(get_session),
 ):
     """Ask a question with streaming response (v2 Placeholder).
-    
+
     Currently returns 501 Not Implemented.
     """
     # Verify ownership before returning 501
     convo_service = ConversationService(db)
     convo = await convo_service.get_owned(conversation_id, actor_id)
     if not convo:
-        raise not_found_exception(f"Conversation {conversation_id} not found")
+        raise not_found_exception("Conversation not found")
 
     raise HTTPException(
         status_code=501,
@@ -321,25 +388,29 @@ async def ask_question_stream(
 # ── Message retrieval ─────────────────────────────────────────────
 
 
-@router.get(
-    "/{conversation_id}/messages/{message_id}",
-    response_model=MessageResponse,
-)
+@router.get("/{conversation_id}/messages/{message_id}")
 async def get_message(
     conversation_id: str,
     message_id: str,
     chat_service: ChatService = Depends(get_chat_service),
+    actor_id: str = Depends(get_actor_id),
+    db: AsyncSession = Depends(get_session),
 ) -> MessageResponse:
     """Get a specific message by ID within a conversation.
 
     Returns 404 if message not found, doesn't belong to conversation,
     or not owned by actor.
     """
+    convo_service = ConversationService(db)
+    convo = await convo_service.get_owned(conversation_id, actor_id)
+    if not convo:
+        raise not_found_exception("Conversation not found")
+
     message = await chat_service.get_message(
         conversation_id=conversation_id, message_id=message_id
     )
     if not message:
-        raise not_found_exception(f"Message {message_id} not found")
+        raise not_found_exception("Message not found")
     return message
 
 
@@ -351,18 +422,23 @@ async def get_message_citations(
     conversation_id: str,
     message_id: str,
     chat_service: ChatService = Depends(get_chat_service),
+    actor_id: str = Depends(get_actor_id),
+    db: AsyncSession = Depends(get_session),
 ) -> list[CitationResponse]:
     """Get citations for a message within a conversation.
 
     Returns 404 if message not found, doesn't belong to conversation,
     or not owned by actor.
     """
+    convo_service = ConversationService(db)
+    convo = await convo_service.get_owned(conversation_id, actor_id)
+    if not convo:
+        raise not_found_exception("Conversation not found")
+
     citations = await chat_service.get_message_citations(
         conversation_id=conversation_id, message_id=message_id
     )
     if citations is None:
-        raise not_found_exception(
-            f"Citations for message {message_id} not found"
-        )
+        raise not_found_exception("Message not found")
 
     return citations

@@ -29,24 +29,21 @@ def get_rag_pipeline(settings: Settings, llm: LLMClient) -> RAGPipeline:
     """
     global _RAG_PIPELINE
 
-    _backend = (settings.llm_backend or "groq").lower()
+    _backend = (settings.llm.backend or "groq").lower()
 
     if _backend == "mock":
         # Fail fast: mock backend is only for tests.
         # In production, this would silently return fake data.
-        _is_testing = os.environ.get("TESTING", "").lower() in (
-            "1",
-            "true",
-        )
-        if not _is_testing:
+        from somaai.settings import AppEnv
+
+        if settings.env != AppEnv.TESTING:
             raise RuntimeError(
                 "LLM_BACKEND='mock' is not allowed outside of tests. "
                 "Set LLM_BACKEND to 'groq', 'openai', or another real "
-                "provider, or set TESTING=1 for test mode."
+                "provider, or set SOMAAI_ENV=test for test mode."
             )
 
     if _RAG_PIPELINE is None:
         _RAG_PIPELINE = RAGPipeline(settings=settings)
 
     return _RAG_PIPELINE
-

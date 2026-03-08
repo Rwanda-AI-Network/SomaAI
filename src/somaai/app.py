@@ -24,20 +24,18 @@ async def lifespan(app: FastAPI):
     await init_db()
 
     # Security audit: warn if API key auth is disabled in non-debug mode
-    if not settings.require_api_key and not settings.debug:
+    if not settings.security.require_api_key and not settings.server.debug:
         startup_logger.warning(
             "⚠️  API key authentication is DISABLED in non-debug mode. "
             "Set REQUIRE_API_KEY=true for production deployments."
         )
 
-    # Pre-load embeddings model to avoid first-request latency
-    # Skip during tests — model download hangs test setup
-    import os
+    from somaai.settings import AppEnv
 
-    if not os.getenv("TESTING"):
+    if settings.env != AppEnv.TESTING:
         get_embeddings_model(settings)
         # Use fallback_to_mock in debug mode to avoid startup crashes
-        app.state.llm = get_llm(settings, fallback_to_mock=settings.debug)
+        app.state.llm = get_llm(settings, fallback_to_mock=settings.server.debug)
     else:
         # In tests, use MockLLMProvider to avoid external calls
         from somaai.providers.llm import MockLLMProvider
@@ -72,12 +70,16 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title=settings.app_name,
-        version=settings.version,
-        debug=settings.debug,
+        version=settings.server.version,
+        debug=settings.server.debug,
         lifespan=lifespan,
     )
 
     setup_middleware(app)
+    
+    # Add custom error handlers
+    _setup_error_handlers(app)
+    
     app.include_router(health_router)
     app.include_router(api_router, prefix="/api")
 
@@ -91,3 +93,28 @@ def create_app() -> FastAPI:
             pass  # Optional dependency
 
     return app
+
+
+def _setup_error_handlers(app: FastAPI) -> None:
+    """Setup custom error handlers for the application."""
+    from fastapi.responses import JSONResponse
+    from starlette.requests import Request
+    
+    # Rate limit error handler
+    try:
+        from slowapi.errors import RateLimitExceeded
+
+        @app.exception_handler(RateLimitExceeded)
+        async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+            """Custom handler for rate limit errors."""
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "detail": (
+                        "Too many requests. Please wait a moment before trying again. "
+                        "This helps us maintain quality service for all users."
+                    )
+                },
+            )
+    except ImportError:
+        pass  # slowapi not installed

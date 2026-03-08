@@ -21,6 +21,8 @@ class MockLLMProvider:
     async def generate(self, prompt: str) -> str:
         import json
 
+        # Check if analogy/realworld were requested in the prompt
+        # LLMGenerator formats them into the prompt
         return json.dumps(
             {
                 "answer": (
@@ -30,8 +32,12 @@ class MockLLMProvider:
                 "sufficiency": "sufficient",
                 "is_grounded": True,
                 "confidence": 1.0,
-                "analogy": None,
-                "realworld_context": None,
+                "reasoning": "This is a mock response.",
+                "citations": [
+                    {"page_number": 1, "quote": "A cell is the basic unit of life."}
+                ],
+                "analogy": "A cell is like a small factory.",
+                "realworld_context": "Cells are found in all living things.",
             }
         )
 
@@ -94,7 +100,7 @@ class GroqLLMProvider:
 
 
 def get_llm(settings: Settings, fallback_to_mock: bool = False) -> LLMClient:
-    """Return the configured LLM provider based on settings.llm_backend.
+    """Return the configured LLM provider based on settings.llm.backend.
 
     Args:
         settings: Application settings.
@@ -103,30 +109,30 @@ def get_llm(settings: Settings, fallback_to_mock: bool = False) -> LLMClient:
     import logging
 
     logger = logging.getLogger("somaai.providers.llm")
-    backend = (settings.llm_backend or "mock").lower()
+    backend = (settings.llm.backend or "mock").lower()
 
     if backend == "mock":
         return MockLLMProvider()
 
     try:
         if backend == "openai":
-            if not settings.openai_api_key:
-                raise ValueError("OPENAI_API_KEY is required for OpenAI backend")
-            if not settings.openai_model:
-                raise ValueError("OPENAI_MODEL is required for OpenAI backend")
+            if not settings.llm.openai_api_key:
+                raise ValueError("SOMAAI_LLM__OPENAI_API_KEY is required for OpenAI backend")
+            if not settings.llm.openai_model:
+                raise ValueError("SOMAAI_LLM__OPENAI_MODEL is required for OpenAI backend")
             return OpenAILLMProvider(
-                api_key=settings.openai_api_key.get_secret_value(),
-                model=settings.openai_model,
+                api_key=settings.llm.openai_api_key.get_secret_value(),
+                model=settings.llm.openai_model,
             )
 
         if backend == "groq":
-            if not settings.groq_api_key:
-                raise ValueError("GROQ_API_KEY is required for Groq backend")
-            if not settings.groq_model:
-                raise ValueError("GROQ_MODEL is required for Groq backend")
+            if not settings.llm.groq_api_key:
+                raise ValueError("SOMAAI_LLM__GROQ_API_KEY is required for Groq backend")
+            if not settings.llm.groq_model:
+                raise ValueError("SOMAAI_LLM__GROQ_MODEL is required for Groq backend")
             return GroqLLMProvider(
-                api_key=settings.groq_api_key.get_secret_value(),
-                model=settings.groq_model,
+                api_key=settings.llm.groq_api_key.get_secret_value(),
+                model=settings.llm.groq_model,
             )
 
         if backend == "huggingface":

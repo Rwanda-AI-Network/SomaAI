@@ -176,7 +176,7 @@ async def verify_api_key(
     from somaai.settings import settings
 
     # Skip auth if disabled (development mode)
-    if not settings.require_api_key:
+    if not settings.security.require_api_key:
         return {"user": "anonymous", "authenticated": False}
 
     if not api_key:

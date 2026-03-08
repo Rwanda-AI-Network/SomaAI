@@ -400,7 +400,7 @@ class TestS3Provider:
         from somaai.settings import SecretStr
 
         mock_settings = MagicMock()
-        mock_settings.s3_secret_key = SecretStr("secret")
+        mock_settings.storage.s3_secret_key = SecretStr("secret")
 
         mock_session = MagicMock()
         mock_session.client.return_value = mock_s3_client
@@ -551,14 +551,14 @@ class TestStorageFactory:
     def test_minio_backend(self):
         """Test factory returns MinioProvider for 'minio' backend."""
         with patch("somaai.settings.settings") as mock_settings:
-            mock_settings.storage_backend = "minio"
-            mock_settings.minio_endpoint = "localhost:9000"
-            mock_settings.minio_access_key = "minioadmin"
+            mock_settings.storage.backend = "minio"
+            mock_settings.storage.minio_endpoint = "localhost:9000"
+            mock_settings.storage.minio_access_key = "minioadmin"
             from somaai.settings import SecretStr
 
-            mock_settings.minio_secret_key = SecretStr("minioadmin")
-            mock_settings.minio_bucket = "test"
-            mock_settings.minio_secure = False
+            mock_settings.storage.minio_secret_key = SecretStr("minioadmin")
+            mock_settings.storage.minio_bucket = "test"
+            mock_settings.storage.minio_secure = False
 
             with patch("minio.Minio") as mock_minio_cls:
                 mock_minio_cls.return_value.bucket_exists.return_value = True
@@ -570,7 +570,7 @@ class TestStorageFactory:
     def test_unknown_backend_raises(self):
         """Test factory raises ValueError for unknown backend."""
         with patch("somaai.settings.settings") as mock_settings:
-            mock_settings.storage_backend = "unknown"
+            mock_settings.storage.backend = "unknown"
             from somaai.providers.storage import get_storage
 
             with pytest.raises(ValueError, match="Unknown storage backend"):

@@ -73,7 +73,7 @@ class Retriever:
             List of documents with content, metadata, and scores
         """
         # Input validation
-        if getattr(self.settings, "rag_enable_input_validation", True):
+        if self.settings.security.rag_enable_input_validation:
             if not query or not query.strip():
                 logger.warning("Empty query provided to retriever")
                 return []
@@ -320,7 +320,18 @@ class Retriever:
         # Format context with source references
         context_parts = []
         total_chars = 0
-        char_limit = max_tokens * 4  # Rough char-to-token ratio
+
+        # Use a very conservative ratio for safety (avg 4 chars/token for English,
+        # but 2.8 for robustness against dense text) and subtract a buffer for
+        # the system prompt, instructions, and query.
+        tokens_reserved_for_docs = max(500, max_tokens - 1200)
+        char_limit = int(tokens_reserved_for_docs * 2.8)
+
+        logger.debug(
+            "Building context with char_limit=%d for ~%d tokens",
+            char_limit,
+            tokens_reserved_for_docs,
+        )
 
         for i, doc in enumerate(docs):
             metadata = doc.get("metadata", {})
@@ -350,8 +361,10 @@ class Retriever:
             # Check token limit
             if total_chars + len(chunk) > char_limit:
                 logger.debug(
-                    "Context limit reached: %d chars, stopping at doc %d/%d",
+                    "Context limit reached: %d chars (~%d tokens), "
+                    "stopping at doc %d/%d",
                     total_chars,
+                    total_chars // 3,
                     i,
                     len(docs),
                 )
@@ -364,7 +377,7 @@ class Retriever:
             "Context built: %d chunks, %d chars (~%d tokens)",
             len(context_parts),
             total_chars,
-            total_chars // 4,
+            total_chars // 3,
         )
 
         # Return only the docs that were included in context

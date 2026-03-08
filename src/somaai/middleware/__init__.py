@@ -30,8 +30,8 @@ def setup_middleware(app: FastAPI) -> None:
 
     app.add_middleware(
         SessionMiddleware,
-        cookie_secure=settings.session_cookie_secure,
-        session_ttl_seconds=settings.session_ttl_days * 24 * 60 * 60,
+        cookie_secure=settings.security.session_cookie_secure,
+        session_ttl_seconds=settings.security.session_ttl_days * 24 * 60 * 60,
     )
 
     # 2. CORS
@@ -51,16 +51,14 @@ def setup_middleware(app: FastAPI) -> None:
 
         # Try Redis storage for distributed rate limiting
         try:
-            import os
+            from somaai.settings import AppEnv, settings
 
-            if os.getenv("TESTING"):
+            if settings.env == AppEnv.TESTING:
                 raise ImportError("Skip Redis in tests")
-
-            from somaai.settings import settings
 
             limiter = Limiter(
                 key_func=_get_actor_id_or_ip,
-                storage_uri=settings.redis_url,
+                storage_uri=settings.redis.url,
                 default_limits=["100/minute"],
             )
             logger.info("Rate limiting enabled (Redis, actor_id key)")
@@ -73,9 +71,7 @@ def setup_middleware(app: FastAPI) -> None:
             logger.warning("Rate limiting in-memory: %s", e)
 
         app.state.limiter = limiter
-        app.add_exception_handler(
-            RateLimitExceeded, _rate_limit_exceeded_handler
-        )
+        app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
         app.add_middleware(SlowAPIMiddleware)
 
     except ImportError:
@@ -91,9 +87,7 @@ def setup_middleware(app: FastAPI) -> None:
     async def add_request_id(request: Request, call_next):
         from somaai.utils.logging_ext import request_id_ctx, set_request_id
 
-        request_id = request.headers.get(
-            "X-Request-ID", str(uuid.uuid4())
-        )
+        request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
         request.state.request_id = request_id
         token = set_request_id(request_id)
 

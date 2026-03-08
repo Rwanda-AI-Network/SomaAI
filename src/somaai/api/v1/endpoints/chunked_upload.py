@@ -9,7 +9,6 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-
 from somaai.contracts.docs import IngestJobResponse
 from somaai.db.session import get_session
 from somaai.services.ingest_service import IngestionService

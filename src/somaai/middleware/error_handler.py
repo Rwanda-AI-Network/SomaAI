@@ -3,6 +3,7 @@
 Provides structured error responses for all exception types:
 - 400 for user/validation errors
 - 404 for not-found
+- 409 for conflicts (duplicates)
 - 503 for service unavailability
 - 500 for unexpected errors with generic message (no leak)
 """
@@ -13,6 +14,7 @@ import logging
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 
 from somaai.exceptions import (
     ConflictError,
@@ -53,9 +55,7 @@ def register_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(ValueError)
-    async def value_error_handler(
-        request: Request, exc: ValueError
-    ) -> JSONResponse:
+    async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
         return _error_response(
             status.HTTP_400_BAD_REQUEST,
             str(exc),
@@ -63,9 +63,7 @@ def register_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(NotFoundError)
-    async def not_found_handler(
-        request: Request, exc: NotFoundError
-    ) -> JSONResponse:
+    async def not_found_handler(request: Request, exc: NotFoundError) -> JSONResponse:
         return _error_response(
             status.HTTP_404_NOT_FOUND,
             str(exc),
@@ -73,13 +71,58 @@ def register_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(ConflictError)
-    async def conflict_handler(
-        request: Request, exc: ConflictError
-    ) -> JSONResponse:
+    async def conflict_handler(request: Request, exc: ConflictError) -> JSONResponse:
+        logger.warning("Conflict error: %s", str(exc))
         return _error_response(
             status.HTTP_409_CONFLICT,
             str(exc),
             "conflict",
+        )
+
+    @app.exception_handler(IntegrityError)
+    async def integrity_error_handler(
+        request: Request, exc: IntegrityError
+    ) -> JSONResponse:
+        """Handle unhandled SQLAlchemy IntegrityError as safety net.
+        
+        This catches any IntegrityError that wasn't properly handled
+        in the CRUD layer and returns a proper 409 or 400 response.
+        """
+        error_msg = str(exc.orig) if hasattr(exc, 'orig') else str(exc)
+        
+        # Check if it's a duplicate key / unique constraint violation
+        if "duplicate key" in error_msg.lower() or "unique constraint" in error_msg.lower():
+            logger.warning("Unhandled duplicate key error: %s", error_msg)
+            return _error_response(
+                status.HTTP_409_CONFLICT,
+                "Resource already exists. Duplicate key violation.",
+                "conflict",
+            )
+        
+        # Check if it's a foreign key violation
+        if "foreign key" in error_msg.lower():
+            logger.warning("Foreign key constraint violation: %s", error_msg)
+            return _error_response(
+                status.HTTP_400_BAD_REQUEST,
+                "Invalid reference. Related resource does not exist.",
+                "validation_error",
+            )
+        
+        # Check if it's a NOT NULL violation
+        if "not null" in error_msg.lower() or "null value" in error_msg.lower():
+            logger.warning("NOT NULL constraint violation: %s", error_msg)
+            return _error_response(
+                status.HTTP_400_BAD_REQUEST,
+                "Missing required field.",
+                "validation_error",
+            )
+        
+        # Generic integrity error
+        logger.error("Database integrity error: %s", error_msg, exc_info=True)
+        return _error_response(
+            status.HTTP_400_BAD_REQUEST,
+            "Database constraint violation.",
+            "validation_error",
         )
 
     @app.exception_handler(ServiceUnavailableError)
@@ -112,3 +155,4 @@ def register_error_handlers(app: FastAPI) -> None:
             "An internal error occurred. Please try again.",
             "internal_error",
         )
+

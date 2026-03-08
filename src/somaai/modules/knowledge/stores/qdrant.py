@@ -57,12 +57,12 @@ def get_qdrant_client(settings: Settings) -> QdrantClient:
     """
     global _QDRANT_CLIENT
     if _QDRANT_CLIENT is None:
-        logger.info(f"Creating Qdrant client: {settings.qdrant_url}")
+        logger.info(f"Creating Qdrant client: {settings.qdrant.url}")
         _QDRANT_CLIENT = QdrantClient(
-            url=settings.qdrant_url,
+            url=settings.qdrant.url,
             api_key=(
-                settings.qdrant_api_key.get_secret_value()
-                if settings.qdrant_api_key
+                settings.qdrant.api_key.get_secret_value()
+                if settings.qdrant.api_key
                 else None
             ),
             timeout=30,
@@ -144,12 +144,10 @@ class QdrantStore(VectorStore):
         if self._store is not None:
             return self._store
 
-        collection_name = self.settings.qdrant_collection_name
+        collection_name = self.settings.qdrant.collection_name
 
         # Ensure collection exists — sync I/O → thread
-        exists = await asyncio.to_thread(
-            self.client.collection_exists, collection_name
-        )
+        exists = await asyncio.to_thread(self.client.collection_exists, collection_name)
         if not exists:
             logger.info(f"Collection {collection_name} not found, creating...")
             try:
@@ -288,7 +286,7 @@ class QdrantStore(VectorStore):
 
                 results = await asyncio.to_thread(
                     self.client.scroll,
-                    collection_name=self.settings.qdrant_collection_name,
+                    collection_name=self.settings.qdrant.collection_name,
                     scroll_filter=Filter(
                         should=[
                             FieldCondition(
@@ -338,7 +336,7 @@ class QdrantStore(VectorStore):
         try:
             results = await asyncio.to_thread(
                 self.client.scroll,
-                collection_name=self.settings.qdrant_collection_name,
+                collection_name=self.settings.qdrant.collection_name,
                 scroll_filter=Filter(
                     must=[
                         FieldCondition(
@@ -365,7 +363,7 @@ class QdrantStore(VectorStore):
         try:
             results = await asyncio.to_thread(
                 self.client.scroll,
-                collection_name=self.settings.qdrant_collection_name,
+                collection_name=self.settings.qdrant.collection_name,
                 scroll_filter=Filter(
                     must=[
                         FieldCondition(
@@ -382,7 +380,7 @@ class QdrantStore(VectorStore):
             if point_ids:
                 await asyncio.to_thread(
                     self.client.delete,
-                    collection_name=self.settings.qdrant_collection_name,
+                    collection_name=self.settings.qdrant.collection_name,
                     points_selector=point_ids,
                 )
 
@@ -413,6 +411,10 @@ class QdrantStore(VectorStore):
 
         Returns:
             List of documents with scores
+            
+        Raises:
+            TimeoutError: If search takes longer than 5 seconds
+            ConnectionError: If Qdrant connection fails
         """
         from qdrant_client.models import FieldCondition, Filter, MatchValue
 
@@ -449,11 +451,21 @@ class QdrantStore(VectorStore):
         )
 
         store = await self._ensure_store()
-        docs = await store.asimilarity_search_with_score(
-            query,
-            k=top_k,
-            filter=qdrant_filter,
-        )
+        
+        # Add timeout for vector search (5 seconds)
+        try:
+            async with asyncio.timeout(5):
+                docs = await store.asimilarity_search_with_score(
+                    query,
+                    k=top_k,
+                    filter=qdrant_filter,
+                )
+        except asyncio.TimeoutError:
+            logger.error(
+                "Qdrant search timeout",
+                extra={"query_length": len(query), "top_k": top_k, "grade": grade},
+            )
+            raise TimeoutError("Vector search timeout after 5 seconds")
 
         return [
             {
@@ -510,7 +522,7 @@ class QdrantStore(VectorStore):
         try:
             points = await asyncio.to_thread(
                 self.client.retrieve,
-                collection_name=self.settings.qdrant_collection_name,
+                collection_name=self.settings.qdrant.collection_name,
                 ids=ids,
                 with_payload=True,
                 with_vectors=False,

@@ -16,7 +16,7 @@ def require_debug_mode():
     """
     from somaai.settings import settings
 
-    if not settings.debug:
+    if not settings.server.debug:
         raise HTTPException(
             status_code=403, detail="This endpoint is only available in debug mode"
         )

@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field
 
 from somaai.contracts.common import Sufficiency, UserRole
 
-
 # ── Enhancement feature flags ────────────────────────────────────
 
 
@@ -49,9 +48,7 @@ class CreateConversationRequest(BaseModel):
     """Request body for POST /api/v1/chat/conversations."""
 
     grade: str = Field(..., description="Grade level (e.g. 'S1', 'P6')")
-    subject: str = Field(
-        default="general", description="Subject (defaults to general)"
-    )
+    subject: str = Field(default="general", description="Subject (defaults to general)")
     title: str | None = Field(
         None, min_length=1, max_length=255, description="Initial conversation title"
     )
@@ -109,8 +106,7 @@ class ConversationListResponse(BaseModel):
     next_cursor: str | None = Field(
         None,
         description=(
-            "Opaque cursor for the next page. "
-            "None indicates this is the last page."
+            "Opaque cursor for the next page. None indicates this is the last page."
         ),
     )
 
@@ -157,9 +153,7 @@ class ResponseEnhancements(BaseModel):
     non-breaking — clients that don't know about a field ignore it.
     """
 
-    analogy: str | None = Field(
-        None, description="Analogy that explains the concept"
-    )
+    analogy: str | None = Field(None, description="Analogy that explains the concept")
     real_world_context: str | None = Field(
         None, description="Real-world application of the concept"
     )
@@ -179,9 +173,7 @@ class CitationResponse(BaseModel):
         ..., max_length=200, description="Preview of cited content"
     )
     view_url: str = Field(..., description="URL to view the source page")
-    relevance_score: float = Field(
-        ..., ge=0, le=1, description="Relevance score (0-1)"
-    )
+    relevance_score: float = Field(..., ge=0, le=1, description="Relevance score (0-1)")
 
 
 class ChatResponse(BaseModel):
@@ -224,9 +216,7 @@ class MessageResponse(BaseModel):
     user_role: UserRole = Field(..., description="Role of user who asked")
     question: str = Field(..., description="Original question")
     answer: str = Field(..., description="AI-generated answer")
-    sufficiency: Sufficiency = Field(
-        ..., description="Whether context was sufficient"
-    )
+    sufficiency: Sufficiency = Field(..., description="Whether context was sufficient")
     confidence: float = Field(
         ..., ge=0, le=1, description="Model confidence in the answer"
     )
@@ -245,6 +235,4 @@ class MessageListResponse(BaseModel):
     messages: list[MessageResponse] = Field(
         default_factory=list, description="Messages in this page"
     )
-    next_cursor: str | None = Field(
-        None, description="Opaque cursor for the next page"
-    )
+    next_cursor: str | None = Field(None, description="Opaque cursor for the next page")

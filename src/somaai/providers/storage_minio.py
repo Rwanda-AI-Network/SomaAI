@@ -49,8 +49,8 @@ class MinioProvider(StorageBackend):
 
         from somaai.settings import settings
 
-        self.endpoint = endpoint or settings.minio_endpoint
-        self.access_key = access_key or settings.minio_access_key
+        self.endpoint = endpoint or settings.storage.minio_endpoint
+        self.access_key = access_key or settings.storage.minio_access_key
         if secret_key is not None:
             self.secret_key = (
                 secret_key.get_secret_value()
@@ -59,12 +59,12 @@ class MinioProvider(StorageBackend):
             )
         else:
             self.secret_key = (
-                settings.minio_secret_key.get_secret_value()
-                if settings.minio_secret_key
+                settings.storage.minio_secret_key.get_secret_value()
+                if settings.storage.minio_secret_key
                 else ""
             )
-        self.bucket = bucket or settings.minio_bucket
-        self.secure = secure if secure is not None else settings.minio_secure
+        self.bucket = bucket or settings.storage.minio_bucket
+        self.secure = secure if secure is not None else settings.storage.minio_secure
 
         self.client = Minio(
             self.endpoint,

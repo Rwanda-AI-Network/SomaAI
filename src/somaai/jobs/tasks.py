@@ -79,7 +79,9 @@ async def ingest_document_task(
 
                     async def _safe_update() -> None:
                         try:
-                            await asyncio.shield(update_job_progress(job_id, pct, stage))
+                            await asyncio.shield(
+                                update_job_progress(job_id, pct, stage)
+                            )
                         except Exception as exc:  # noqa: BLE001
                             _task_logger.warning(
                                 "Progress update failed (job=%s stage=%s): %s",

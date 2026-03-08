@@ -5,17 +5,19 @@ x-app-common: &app-common
   env_file:
     - ../.env
   environment:
-    - DATABASE_URL=postgresql+asyncpg://somaai:somaai@postgres:5432/somaai
-    - REDIS_URL=redis://redis:6379/0
-    - REDIS_JOBS_URL=redis://redis:6379/1
-    - REDIS_CACHE_URL=redis://redis:6379/2
-    - QDRANT_URL=http://qdrant:6333
-    - STORAGE_BACKEND=minio
-    - MINIO_ENDPOINT=minio:9000
-    - MINIO_ACCESS_KEY=minioadmin
-    - MINIO_SECRET_KEY=minioadmin
-    - MINIO_BUCKET=somaai-documents
-    - MINIO_SECURE=false
+    - SOMAAI_DB__URL=postgresql+asyncpg://somaai:somaai@postgres:5432/somaai
+    - SOMAAI_REDIS__URL=redis://redis:6379/0
+    - SOMAAI_REDIS__JOBS_URL=redis://redis:6379/1
+    - SOMAAI_REDIS__CACHE_URL=redis://redis:6379/2
+    - SOMAAI_QDRANT__URL=http://qdrant:6333
+    - SOMAAI_STORAGE__BACKEND=minio
+    - SOMAAI_STORAGE__MINIO_ENDPOINT=minio:9000
+    - SOMAAI_STORAGE__MINIO_ACCESS_KEY=minioadmin
+    - SOMAAI_STORAGE__MINIO_SECRET_KEY=minioadmin
+    - SOMAAI_STORAGE__MINIO_BUCKET=somaai-documents
+    - SOMAAI_STORAGE__MINIO_SECURE=false
+    - SOMAAI_SERVER__DEBUG=true
+    - SOMAAI_ENV=dev
   depends_on:
     postgres:
       condition: service_healthy
@@ -126,77 +128,76 @@ services:
     restart: unless-stopped
     networks:
       - somaai-network
+    # Prometheus - Metrics Collection
+    # prometheus:
+    #   image: prom/prometheus:v2.51.0
+    #   container_name: somaai-prometheus
+    #   ports:
+    #     - "9090:9090"
+    #   volumes:
+    #     - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    #     - ../monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+    #     - prometheus_data:/prometheus
+    #   command:
+    #     - '--config.file=/etc/prometheus/prometheus.yml'
+    #     - '--storage.tsdb.path=/prometheus'
+    #     - '--storage.tsdb.retention.time=15d'
+    #     - '--storage.tsdb.retention.size=5GB'
+    #     - '--web.console.libraries=/etc/prometheus/console_libraries'
+    #     - '--web.console.templates=/etc/prometheus/consoles'
+    #     - '--web.enable-lifecycle'
+    #   healthcheck:
+    #     test: [ "CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy" ]
+    #     interval: 15s
+    #     timeout: 5s
+    #     retries: 3
+    #     start_period: 10s
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 512M
+    # restart: unless-stopped
+    # networks:
+    #   - somaai-network
 
-  # Prometheus - Metrics Collection
-  prometheus:
-    image: prom/prometheus:v2.51.0
-    container_name: somaai-prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ../monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=15d'
-      - '--storage.tsdb.retention.size=5GB'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--web.enable-lifecycle'
-    healthcheck:
-      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy" ]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-    restart: unless-stopped
-    networks:
-      - somaai-network
-
-  # Grafana - Metrics Visualization
-  grafana:
-    image: grafana/grafana:10.4.1
-    container_name: somaai-grafana
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/somaai-dashboard.json
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-    healthcheck:
-      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health" ]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-    depends_on:
-      prometheus:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - somaai-network
+    # Grafana - Metrics Visualization
+    # grafana:
+    #   image: grafana/grafana:10.4.1
+    #   container_name: somaai-grafana
+    #   ports:
+    #     - "3000:3000"
+    #   environment:
+    #     - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+    #     - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+    #     - GF_USERS_ALLOW_SIGN_UP=false
+    #     - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/somaai-dashboard.json
+    #   volumes:
+    #     - grafana_data:/var/lib/grafana
+    #     - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    #   healthcheck:
+    #     test: [ "CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health" ]
+    #     interval: 15s
+    #     timeout: 5s
+    #     retries: 3
+    #     start_period: 15s
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 256M
+    # depends_on:
+    #   prometheus:
+    #     condition: service_healthy
+    # restart: unless-stopped
+    # networks:
+    #   - somaai-network
 
 volumes:
   postgres_data:
   redis_data:
   qdrant_data:
   minio_data:
-  prometheus_data:
-  grafana_data:
+    # prometheus_data:
+    # grafana_data:
 
 
 networks:

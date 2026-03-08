@@ -99,7 +99,7 @@ class RAGPipeline:
         # Initialize debugger (no-op when disabled)
         from somaai.utils.debug import PipelineDebugger
 
-        debug = PipelineDebugger(enabled=getattr(self.settings, "debug", False))
+        debug = PipelineDebugger(enabled=self.settings.server.debug)
         debug.start(query, grade, subject)
 
         try:
