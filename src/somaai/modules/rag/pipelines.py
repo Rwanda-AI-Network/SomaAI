@@ -15,8 +15,8 @@ from somaai.modules.rag.generator import LLMGenerator
 from somaai.modules.rag.prompts import CONDENSE_QUESTION_PROMPT
 from somaai.modules.rag.query_classifier import classify_query
 from somaai.modules.rag.retriever import Retriever
+from somaai.monitoring import log_rag_request
 from somaai.utils.ids import generate_id
-from somaai.utils.observability import log_rag_request
 from somaai.utils.security import sanitize_query
 from somaai.utils.time import utc_now
 
@@ -104,14 +104,6 @@ class RAGPipeline:
 
         debug = PipelineDebugger(enabled=getattr(self.settings, "debug", False))
         debug.start(query, grade, subject)
-
-        # Track metrics
-        try:
-            from somaai.monitoring import rag_latency_seconds
-
-            monitor_latency = True
-        except ImportError:
-            monitor_latency = False
 
         try:
             # 0. Check response cache
@@ -222,39 +214,21 @@ class RAGPipeline:
             # 8. Cache response
             await cache.set(query, grade, subject, response)
 
-            # 9. Log for observability
+            # 9. Log for observability (writes both structured log + Prometheus)
             latency_ms = (time.time() - start_time) * 1000
 
-            if monitor_latency:
-                rag_latency_seconds.labels(stage="total").observe(latency_ms / 1000)
-
-            try:
-                from somaai.monitoring import (
-                    log_rag_request as log_rag_metrics,
-                )
-
-                log_rag_metrics(
-                    query=query,
-                    grade=grade,
-                    subject=subject,
-                    user_role=user_role,
-                    docs_retrieved=len(docs),
-                    docs_reranked=len(docs),
-                    latency_ms=latency_ms,
-                    success=True,
-                    confidence=float(response.get("confidence", 0)),
-                    sufficiency=response.get("sufficiency", "unknown"),
-                )
-            except ImportError:
-                log_rag_request(
-                    query=query,
-                    grade=grade,
-                    subject=subject,
-                    docs_retrieved=len(docs),
-                    docs_reranked=len(docs),
-                    latency_ms=latency_ms,
-                    success=True,
-                )
+            log_rag_request(
+                query=query,
+                grade=grade,
+                subject=subject,
+                user_role=user_role,
+                docs_retrieved=len(docs),
+                docs_reranked=len(docs),
+                latency_ms=latency_ms,
+                success=True,
+                confidence=float(response.get("confidence", 0)),
+                sufficiency=response.get("sufficiency", "unknown"),
+            )
 
             debug.end(response)
             return response
@@ -262,33 +236,17 @@ class RAGPipeline:
         except Exception as e:
             latency_ms = (time.time() - start_time) * 1000
 
-            try:
-                from somaai.monitoring import (
-                    log_rag_request as log_rag_metrics,
-                )
-
-                log_rag_metrics(
-                    query=query,
-                    grade=grade,
-                    subject=subject,
-                    user_role=user_role,
-                    docs_retrieved=0,
-                    docs_reranked=0,
-                    latency_ms=latency_ms,
-                    success=False,
-                    error=str(e),
-                )
-            except ImportError:
-                log_rag_request(
-                    query=query,
-                    grade=grade,
-                    subject=subject,
-                    docs_retrieved=0,
-                    docs_reranked=0,
-                    latency_ms=latency_ms,
-                    success=False,
-                    error=str(e),
-                )
+            log_rag_request(
+                query=query,
+                grade=grade,
+                subject=subject,
+                user_role=user_role,
+                docs_retrieved=0,
+                docs_reranked=0,
+                latency_ms=latency_ms,
+                success=False,
+                error=str(e),
+            )
             raise
 
     async def _condense_query(self, query: str, history: str) -> str:

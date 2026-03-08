@@ -57,7 +57,13 @@ class Document(Base):
     grade = Column(String(10), nullable=False, index=True)
     subject = Column(String(50), nullable=False, index=True)
     page_count = Column(Integer, default=0)
+    chunk_count = Column(Integer, default=0)
+    status = Column(
+        String(20), default="pending", index=True
+    )  # pending, processing, completed, failed
+    error_message = Column(String, nullable=True)
     metadata_json = Column(JSON, nullable=True)
+    content_hash = Column(String(64), nullable=True, index=True)  # SHA-256 hex digest
     uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
     processed_at = Column(DateTime(timezone=True), nullable=True)
 

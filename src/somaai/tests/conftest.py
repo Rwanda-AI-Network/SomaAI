@@ -47,5 +47,10 @@ def client():
             "somaai.modules.rag.retriever.Retriever.retrieve", new_callable=AsyncMock
         ) as mock_retrieve:
             mock_retrieve.return_value = []
+        # Mock Qdrant client for health check
+        with patch("somaai.health.get_qdrant_client") as mock_qdrant_client_func:
+            mock_qdrant_client = MagicMock()
+            mock_qdrant_client_func.return_value = mock_qdrant_client
+
             with TestClient(app) as c:
                 yield c

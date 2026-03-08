@@ -1,0 +1,81 @@
+groups:
+  - name: somaai_alerts
+    rules:
+      # ── Availability ──────────────────────────────────────────────
+      - alert: SomaAIServiceDown
+        expr: up{job="somaai-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SomaAI application is unreachable"
+          description: "Prometheus cannot scrape the SomaAI app for >1 minute."
+
+      # ── Latency ───────────────────────────────────────────────────
+      - alert: SomaAIHighLatency
+        expr: histogram_quantile(0.95, rate(somaai_rag_latency_seconds_bucket{stage="total"}[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "RAG p95 latency exceeds 10 seconds"
+          description: "The 95th percentile RAG latency has been >10s for 5 minutes."
+
+      # ── Error Rate ────────────────────────────────────────────────
+      - alert: SomaAIHighErrorRate
+        expr: |
+          (
+            sum(rate(somaai_rag_requests_total{status="error"}[5m]))
+            /
+            sum(rate(somaai_rag_requests_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "RAG error rate exceeds 5%"
+          description: "More than 5% of RAG requests are failing over the last 5 minutes."
+
+      # ── Infrastructure ────────────────────────────────────────────
+      - alert: SomaAIQdrantDown
+        expr: somaai_service_up{service="qdrant"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Qdrant vector database is unreachable"
+          description: "The Qdrant connection has been down for >2 minutes."
+
+      - alert: SomaAIRedisDown
+        expr: somaai_service_up{service="redis"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis cache is unreachable"
+          description: "The Redis connection has been down for >2 minutes. Cache is degraded."
+
+      # ── Quality ───────────────────────────────────────────────────
+      - alert: SomaAIHighEmptyResults
+        expr: |
+          (
+            sum(rate(somaai_rag_empty_results_total[15m]))
+            /
+            sum(rate(somaai_rag_requests_total[15m]))
+          ) > 0.3
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Over 30% of queries returning empty results"
+          description: "A high fraction of queries are not finding any documents. Check the vector store."
+
+      # ── LLM ───────────────────────────────────────────────────────
+      - alert: SomaAILLMErrors
+        expr: sum(rate(somaai_llm_api_errors_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM API errors are elevated"
+          description: "LLM API is returning errors at >0.1/s for 5 minutes."
