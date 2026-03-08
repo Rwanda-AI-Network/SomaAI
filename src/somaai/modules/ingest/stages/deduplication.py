@@ -39,21 +39,55 @@ class DeduplicationStage(PipelineStage):
         """Check for existing document.
 
         Steps:
-        1. Compute file content hash
+        1. Compute file content hash (from bytes in context)
         2. Check if doc_id exists in store
         3. Return skip signal if found
         """
-        from somaai.utils.files import async_read_file, compute_file_hash
+        from somaai.utils.files import compute_file_hash
 
         self._report_progress(ctx, "Computing file hash", 0.2)
 
-        # Compute content hash for deduplication
-        try:
-            file_content = await async_read_file(ctx.file_path)
-            ctx.file_hash = compute_file_hash(file_content)
-        except Exception as e:
-            logger.warning(f"Could not compute file hash: {e}")
-            ctx.file_hash = None
+        if ctx.file_hash:
+            logger.debug(
+                f"Using pre-computed hash for doc {ctx.doc_id}: {ctx.file_hash[:12]}..."
+            )
+        else:
+            # Compute content hash for deduplication
+            try:
+                import hashlib
+
+                sha256 = hashlib.sha256()
+
+                if ctx.file_stream:
+                    # Use stream (most efficient)
+                    try:
+                        ctx.file_stream.seek(0)
+                    except (AttributeError, Exception):
+                        pass
+                    while chunk := ctx.file_stream.read(65536):
+                        sha256.update(chunk)
+                    try:
+                        ctx.file_stream.seek(0)
+                    except (AttributeError, Exception):
+                        pass
+                    ctx.file_hash = sha256.hexdigest()
+                elif ctx.file_content:
+                    # fallback to bytes
+                    from somaai.utils.files import compute_file_hash
+
+                    ctx.file_hash = compute_file_hash(ctx.file_content)
+                else:
+                    # Fetch as stream from object storage (fallback)
+                    from somaai.providers.storage import get_storage
+
+                    storage = get_storage()
+                    key = ctx.storage_key or str(ctx.file_path)
+
+                    async with storage.open(key) as stream:
+                        ctx.file_hash = stream.hexdigest()
+            except Exception as e:
+                logger.warning(f"Could not compute file hash: {e}")
+                ctx.file_hash = None
 
         self._report_progress(ctx, "Checking for duplicates", 0.5)
 

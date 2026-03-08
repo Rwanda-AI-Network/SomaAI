@@ -29,10 +29,6 @@ class SemanticChunker:
         Args:
             max_chunk_size: Maximum characters per chunk (soft limit)
             overlap_size: Overlap character count for context preservation
-
-        Args:
-            max_chunk_size: Maximum characters per chunk (soft limit)
-            overlap_size: Overlap character count for context preservation
         """
         self.max_chunk_size = max_chunk_size
         self.overlap_size = overlap_size
@@ -41,7 +37,8 @@ class SemanticChunker:
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=max_chunk_size,
             chunk_overlap=overlap_size,
-            separators=["\n\n", "\n", ". ", " ", ""],
+            # Prioritize: 1. Paragraphs, 2. Sentences, 3. Phrases
+            separators=["\n\n", "\n", ". ", "? ", "! ", "; ", " ", ""],
             keep_separator=False,
         )
 
@@ -158,7 +155,6 @@ class SemanticChunker:
             Document(
                 page_content=contextual_content,
                 metadata={
-                    **base_metadata,
                     **base_metadata,
                     "chunk_id": parent_id,
                     "chunk_type": "section_parent",

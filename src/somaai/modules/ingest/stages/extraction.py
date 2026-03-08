@@ -285,9 +285,12 @@ class ExtractionStage(PipelineStage):
             # STEP 1: Extract using text_extractor
             # text_extractor handles: strategy selection, OCR fallback
             # Run in thread pool to avoid blocking event loop
+            # Priority: stream > content > path
+            input_data = ctx.file_stream or ctx.file_content or ctx.file_path
+
             raw_result = await asyncio.to_thread(
                 self.extractor,
-                input_data=ctx.file_path,
+                input_data=input_data,
                 ocr_mode=ctx.ocr_mode,
                 language=ctx.language,
             )

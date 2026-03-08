@@ -93,30 +93,52 @@ class GroqLLMProvider:
         raise NotImplementedError("Groq embeddings not implemented (use local).")
 
 
-def get_llm(settings: Settings) -> LLMClient:
-    """Return the configured LLM provider based on settings.llm_backend."""
+def get_llm(settings: Settings, fallback_to_mock: bool = False) -> LLMClient:
+    """Return the configured LLM provider based on settings.llm_backend.
+
+    Args:
+        settings: Application settings.
+        fallback_to_mock: If True, return MockLLMProvider if configuration is missing.
+    """
+    import logging
+
+    logger = logging.getLogger("somaai.providers.llm")
     backend = (settings.llm_backend or "mock").lower()
 
     if backend == "mock":
         return MockLLMProvider()
 
-    if backend == "openai":
-        if not settings.openai_api_key:
-            raise ValueError("OPENAI_API_KEY is required when LLM_BACKEND=openai")
-        if not settings.openai_model:
-            raise ValueError("OPENAI_MODEL is required when LLM_BACKEND=openai")
-        return OpenAILLMProvider(
-            api_key=settings.openai_api_key, model=settings.openai_model
-        )
+    try:
+        if backend == "openai":
+            if not settings.openai_api_key:
+                raise ValueError("OPENAI_API_KEY is required for OpenAI backend")
+            if not settings.openai_model:
+                raise ValueError("OPENAI_MODEL is required for OpenAI backend")
+            return OpenAILLMProvider(
+                api_key=settings.openai_api_key.get_secret_value(),
+                model=settings.openai_model,
+            )
 
-    if backend == "groq":
-        if not settings.groq_api_key:
-            raise ValueError("GROQ_API_KEY is required when LLM_BACKEND=groq")
-        if not settings.groq_model:
-            raise ValueError("GROQ_MODEL is required when LLM_BACKEND=groq")
-        return GroqLLMProvider(api_key=settings.groq_api_key, model=settings.groq_model)
+        if backend == "groq":
+            if not settings.groq_api_key:
+                raise ValueError("GROQ_API_KEY is required for Groq backend")
+            if not settings.groq_model:
+                raise ValueError("GROQ_MODEL is required for Groq backend")
+            return GroqLLMProvider(
+                api_key=settings.groq_api_key.get_secret_value(),
+                model=settings.groq_model,
+            )
 
-    if backend == "huggingface":
-        raise NotImplementedError("HuggingFace backend not implemented yet")
+        if backend == "huggingface":
+            raise NotImplementedError("HuggingFace backend not implemented yet")
 
-    raise ValueError(f"Unknown LLM_BACKEND: {backend}")
+        raise ValueError(f"Unknown LLM_BACKEND: {backend}")
+
+    except (ValueError, NotImplementedError) as e:
+        if fallback_to_mock:
+            logger.warning(
+                f"⚠️  LLM configuration error for '{backend}': {e}. "
+                "FALLING BACK TO MOCK PROVIDER for development."
+            )
+            return MockLLMProvider()
+        raise

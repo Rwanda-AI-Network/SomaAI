@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import sys
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, patch
 
 # Add src to path
@@ -20,15 +21,43 @@ async def test_ingestion_flow():
     settings = Settings(llm_backend="mock")
 
     # Mock QdrantStore to avoid real DB connection
-    # Patch where it is defined, not where it is imported locally
-    with patch("somaai.modules.knowledge.stores.qdrant.QdrantStore") as mock_store_cls:
+    with (
+        patch("somaai.modules.knowledge.stores.qdrant.QdrantStore") as mock_store_cls,
+        patch("somaai.providers.storage.get_storage") as mock_storage_func,
+    ):
+        from unittest.mock import MagicMock
+
         mock_store = AsyncMock()
-        mock_store.exists_by_doc_id.return_value = False  # Not a duplicate
-        mock_store.add.return_value = True  # Successful storage
+        mock_store.exists_by_doc_id.return_value = False
+        mock_store.add.return_value = []
         mock_store_cls.return_value = mock_store
 
-        # Instantiate orchestrator
-        orchestrator = IngestionOrchestrator(settings)
+        # Mock storage (MagicMock for sync methods like open, read, hexdigest)
+        mock_storage = MagicMock()
+        mock_storage_func.return_value = mock_storage
+
+        # Mock storage context manager
+        mock_stream = MagicMock()
+        mock_stream.hexdigest.return_value = "test-hash"
+
+        @asynccontextmanager
+        async def mock_open(*args, **kwargs):
+            yield mock_stream
+
+        mock_storage.open = mock_open
+
+        # Mock database session to avoid real DB hits
+        with (
+            patch("somaai.db.session.async_session_maker") as mock_session_maker,
+            patch("somaai.db.crud.create_chunks", new_callable=AsyncMock),
+            patch("somaai.db.crud.update_document_processed", new_callable=AsyncMock),
+            patch("somaai.db.crud.update_document_status", new_callable=AsyncMock),
+        ):
+            mock_session = AsyncMock()
+            mock_session_maker.return_value.__aenter__.return_value = mock_session
+
+            # Instantiate orchestrator
+            orchestrator = IngestionOrchestrator(settings)
 
         # Define progress callback
         def on_progress(stage, pct):

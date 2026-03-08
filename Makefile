@@ -17,7 +17,7 @@ install:
 	UV_HTTP_TIMEOUT=300 uv sync
 
 dev:
-	UV_HTTP_TIMEOUT=300 uv run uvicorn somaai.main:app --reload --host 0.0.0.0 --port 8000
+	DEBUG=true UV_HTTP_TIMEOUT=300 uv run uvicorn somaai.main:app --reload --host 0.0.0.0 --port 8000
 
 lint:
 	uv run ruff check src/

@@ -39,7 +39,6 @@ venv.bak/
 
 # IDEs and editors
 .idea/
-.vscode/
 *.swp
 *.swo
 *~
@@ -127,3 +126,7 @@ docker-compose.override.yml
 /scripts/create_issues.sh
 /.github/issues
 ./todo.md
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+.gitignore

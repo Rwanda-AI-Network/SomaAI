@@ -31,7 +31,7 @@ def get_embeddings(settings: Settings) -> HuggingFaceEmbeddings | OpenAIEmbeddin
         if settings.openai_api_key:
             logger.info("Creating OpenAI embeddings model")
             _EMBEDDINGS_MODEL = OpenAIEmbeddings(
-                api_key=settings.openai_api_key,
+                api_key=settings.openai_api_key.get_secret_value(),
                 model="text-embedding-3-small",
             )
         else:

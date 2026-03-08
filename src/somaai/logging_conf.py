@@ -5,11 +5,19 @@ import sys
 
 
 def setup_logging() -> None:
-    """Configure application logging."""
+    """Configure application logging with request traceability."""
+    from somaai.utils.logging_ext import RequestIDFilter
+
+    handler = logging.StreamHandler(sys.stdout)
+    handler.addFilter(RequestIDFilter())
+
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[logging.StreamHandler(sys.stdout)],
+        format=(
+            "%(asctime)s - %(name)s - [%(request_id)s] - %(levelname)s - %(message)s"
+        ),
+        handlers=[handler],
+        force=True,  # Ensure we override any existing basic config
     )
 
 

@@ -4,25 +4,41 @@ Provides async database sessions for FastAPI dependency injection.
 Supports both PostgreSQL (production) and SQLite (testing).
 """
 
+import logging
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from somaai.settings import settings
 
-# Create async engine
+logger = logging.getLogger(__name__)
+
 # Create async engine
 db_host = (
     settings.database_url.split("@")[-1]
     if "@" in settings.database_url
     else "local/sqlite"
 )
-print(f"DEBUG: Connecting to DB URL: {db_host}")
+logger.debug("Connecting to DB: %s", db_host)
+
+# SQLite uses StaticPool which does not accept pool_size/max_overflow/pool_timeout.
+# Only apply production pool settings for connection-based backends (PostgreSQL).
+_is_sqlite = settings.database_url.startswith("sqlite")
+
+_pool_kwargs: dict = {}
+if not _is_sqlite:
+    _pool_kwargs = {
+        "pool_size": settings.db_pool_size,
+        "max_overflow": settings.db_max_overflow,
+        "pool_timeout": settings.db_pool_timeout,
+        "pool_pre_ping": True,
+    }
 
 engine = create_async_engine(
     settings.database_url,
     echo=settings.debug,
     future=True,
+    **_pool_kwargs,
 )
 
 # Create async session factory
@@ -73,3 +89,4 @@ async def close_db() -> None:
     Call on application shutdown.
     """
     await engine.dispose()
+    logger.info("Database engine disposed")

@@ -19,8 +19,9 @@
 - `GET /chat/history` - Get conversation history
 
 ### Ingest
-- `POST /ingest` - Ingest document (PDF/DOCX < 50MB) - Rate Limited: 10/min
-- `GET /ingest/jobs/{id}` - Get ingestion job status
+- `POST /ingest` - Ingest document (PDF/DOCX). Rate Limited: 10/min.
+- `GET /ingest/jobs/{id}` - Get ingestion job status.
+- *See [Upload & Ingestion Guide](./UPLOAD_AND_INGESTION.md) for streaming details.*
 
 ### Documents & Meta
 - `GET /docs/{id}/view` - View processed document content
@@ -33,15 +34,16 @@
 - `GET /teacher/profile` - Get teacher settings
 
 ### Chunked Upload (Files > 50MB)
-- `POST /upload/init` - Initialize upload session
-- `POST /upload/chunk/{id}/{idx}` - Upload file chunk
-- `POST /upload/complete/{id}` - Reassemble and start ingestion
-- `DELETE /upload/cancel/{id}` - Cancel upload session
+*Recommended for large student books to avoid timeouts.*
+- `POST /upload/init` - Initialize upload session.
+- `POST /upload/chunk/{id}/{idx}` - Upload file chunk.
+- `POST /upload/complete/{id}` - Reassemble and start ingestion.
+- `DELETE /upload/cancel/{id}` - Cancel upload session.
+- *See [Upload & Ingestion Guide](./UPLOAD_AND_INGESTION.md) for mechanics.*
 
 ### Search
 - `POST /retrieval/search` - Debug/Admin search of vector store
 
 ### Feedback
-- `POST /feedback` - Submit helpfulness feedback on AI responses
 
 
