@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 
 class BytesSource:
     """Stream source for in-memory bytes.
-    
+
     Use for small files or when data is already in memory.
-    
+
     Example:
         >>> source = BytesSource(pdf_bytes)
         >>> async with source.open() as stream:
@@ -29,7 +29,7 @@ class BytesSource:
 
     def __init__(self, data: bytes, doc_id: str | None = None):
         """Initialize bytes source.
-        
+
         Args:
             data: Binary data
             doc_id: Document identifier
@@ -39,7 +39,7 @@ class BytesSource:
 
     async def open(self, **kwargs) -> BinaryIO:
         """Open bytes as stream.
-        
+
         Returns:
             BytesIO stream (seekable)
         """
@@ -48,7 +48,7 @@ class BytesSource:
 
     async def get_metadata(self) -> dict:
         """Get metadata.
-        
+
         Returns:
             Dict with size and content_type
         """
@@ -61,7 +61,7 @@ class BytesSource:
 
     def supports_seeking(self) -> bool:
         """BytesIO is always seekable.
-        
+
         Returns:
             True
         """
@@ -70,9 +70,9 @@ class BytesSource:
 
 class LocalFileSource:
     """Stream source for local files.
-    
+
     Use for files on the local filesystem.
-    
+
     Example:
         >>> source = LocalFileSource("/path/to/file.pdf")
         >>> async with source.open() as stream:
@@ -83,7 +83,7 @@ class LocalFileSource:
 
     def __init__(self, path: Path | str, doc_id: str | None = None):
         """Initialize local file source.
-        
+
         Args:
             path: File path
             doc_id: Document identifier
@@ -93,10 +93,10 @@ class LocalFileSource:
 
     async def open(self, **kwargs) -> BinaryIO:
         """Open local file.
-        
+
         Returns:
             File stream (seekable)
-        
+
         Raises:
             FileNotFoundError: If file doesn't exist
         """
@@ -108,7 +108,7 @@ class LocalFileSource:
 
     async def get_metadata(self) -> dict:
         """Get file metadata.
-        
+
         Returns:
             Dict with size, content_type, etc.
         """
@@ -124,7 +124,7 @@ class LocalFileSource:
 
     def supports_seeking(self) -> bool:
         """Local files are always seekable.
-        
+
         Returns:
             True
         """
@@ -140,10 +140,10 @@ class LocalFileSource:
 
 class S3Source:
     """Stream source for S3/MinIO objects.
-    
+
     Uses smart-open for efficient streaming with automatic retry,
     connection pooling, and multipart download.
-    
+
     Example:
         >>> source = S3Source("my-bucket", "docs/file.pdf")
         >>> async with source.open() as stream:
@@ -162,7 +162,7 @@ class S3Source:
         doc_id: str | None = None,
     ):
         """Initialize S3 source.
-        
+
         Args:
             bucket: S3 bucket name
             key: Object key
@@ -182,9 +182,9 @@ class S3Source:
 
     async def open(self, **kwargs) -> BinaryIO:
         """Open S3 object as stream.
-        
+
         Uses smart-open for efficient streaming.
-        
+
         Returns:
             Stream object (may not be seekable)
         """
@@ -221,7 +221,7 @@ class S3Source:
 
     async def get_metadata(self) -> dict:
         """Get S3 object metadata.
-        
+
         Returns:
             Dict with size, content_type, etc.
         """
@@ -262,7 +262,7 @@ class S3Source:
 
     def supports_seeking(self) -> bool:
         """S3 streams are not seekable by default.
-        
+
         Returns:
             False
         """
@@ -271,9 +271,9 @@ class S3Source:
 
 class HTTPSource:
     """Stream source for HTTP/HTTPS URLs.
-    
+
     Use for downloading files from web servers.
-    
+
     Example:
         >>> source = HTTPSource("https://example.com/file.pdf")
         >>> async with source.open() as stream:
@@ -284,7 +284,7 @@ class HTTPSource:
 
     def __init__(self, url: str, doc_id: str | None = None):
         """Initialize HTTP source.
-        
+
         Args:
             url: HTTP/HTTPS URL
             doc_id: Document identifier
@@ -294,9 +294,9 @@ class HTTPSource:
 
     async def open(self, **kwargs) -> BinaryIO:
         """Open HTTP URL as stream.
-        
+
         Uses httpx for async streaming.
-        
+
         Returns:
             Stream object (not seekable)
         """
@@ -319,7 +319,7 @@ class HTTPSource:
 
     async def get_metadata(self) -> dict:
         """Get HTTP metadata.
-        
+
         Returns:
             Dict with size, content_type, etc.
         """
@@ -339,7 +339,7 @@ class HTTPSource:
 
     def supports_seeking(self) -> bool:
         """HTTP streams are not seekable.
-        
+
         Returns:
             False
         """

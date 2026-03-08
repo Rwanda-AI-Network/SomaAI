@@ -286,13 +286,13 @@ class ExtractionStage(PipelineStage):
 
         try:
             from somaai.utils.text_extractor.streaming import StreamFactory
-            
+
             # STEP 1: Create managed stream from any source
             # Factory auto-detects: S3, local file, bytes, HTTP
             if ctx.storage_key:
                 # S3/MinIO file - use factory with storage backend
                 from somaai.settings import settings
-                
+
                 managed_stream = await StreamFactory.create_from_storage(
                     storage_key=ctx.storage_key,
                     backend=settings.storage.backend,
@@ -323,7 +323,7 @@ class ExtractionStage(PipelineStage):
                     doc_id=ctx.doc_id,
                     ensure_seekable=True,  # Auto-adapt if needed
                 )
-            
+
             elif ctx.file_content:
                 # Bytes in memory
                 managed_stream = await StreamFactory.create(
@@ -331,7 +331,7 @@ class ExtractionStage(PipelineStage):
                     doc_id=ctx.doc_id,
                     ensure_seekable=True,
                 )
-            
+
             elif ctx.file_stream:
                 # Existing stream - wrap it (less common path)
                 # For now, read into bytes and use factory
@@ -342,7 +342,7 @@ class ExtractionStage(PipelineStage):
                     doc_id=ctx.doc_id,
                     ensure_seekable=True,
                 )
-            
+
             else:
                 # Local file
                 managed_stream = await StreamFactory.create(
@@ -350,7 +350,7 @@ class ExtractionStage(PipelineStage):
                     doc_id=ctx.doc_id,
                     ensure_seekable=True,
                 )
-            
+
             # STEP 2: Use context manager for guaranteed cleanup
             async with managed_stream as stream:
                 # STEP 3: Extract using text_extractor
@@ -360,7 +360,7 @@ class ExtractionStage(PipelineStage):
                     ocr_mode=ctx.ocr_mode,
                     language=ctx.language,
                 )
-            
+
             # Stream automatically cleaned up here (even on exceptions)
 
             self._report_progress(ctx, "Sanitizing extracted content", 0.5)
@@ -383,15 +383,17 @@ class ExtractionStage(PipelineStage):
                 # Convert ValidationIssue objects to dicts for better error messages
                 issue_dicts = []
                 for issue in validation.issues:
-                    if hasattr(issue, 'to_dict'):
+                    if hasattr(issue, "to_dict"):
                         issue_dicts.append(issue.to_dict())
                     else:
-                        issue_dicts.append({
-                            'severity': getattr(issue, 'severity', 'error'),
-                            'message': getattr(issue, 'message', str(issue)),
-                            'suggestion': getattr(issue, 'suggestion', '')
-                        })
-                
+                        issue_dicts.append(
+                            {
+                                "severity": getattr(issue, "severity", "error"),
+                                "message": getattr(issue, "message", str(issue)),
+                                "suggestion": getattr(issue, "suggestion", ""),
+                            }
+                        )
+
                 raise ExtractionValidationError(issue_dicts)
 
             validation.log_issues()  # Log warnings

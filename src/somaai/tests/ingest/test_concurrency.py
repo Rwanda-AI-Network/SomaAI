@@ -16,6 +16,7 @@ async def test_concurrent_ingestion_deduplication():
     the same document at once.
     """
     from somaai.settings import LLMSettings
+
     settings = Settings(llm=LLMSettings(backend="mock"))
     orchestrator = IngestionOrchestrator(settings)
 
@@ -106,6 +107,7 @@ async def test_concurrent_ingestion_deduplication():
 async def test_ingestion_error_isolation():
     """Verify that a failure in one ingestion task does not affect others."""
     from somaai.settings import LLMSettings
+
     settings = Settings(llm=LLMSettings(backend="mock"))
     orchestrator = IngestionOrchestrator(settings)
 

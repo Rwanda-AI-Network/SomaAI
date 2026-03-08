@@ -10,7 +10,9 @@ class CacheConfig:
 
     # Redis configuration
     redis_url: str = field(
-        default_factory=lambda: os.getenv("SOMAAI_REDIS__URL", "redis://localhost:6379/0")
+        default_factory=lambda: os.getenv(
+            "SOMAAI_REDIS__URL", "redis://localhost:6379/0"
+        )
     )
     redis_password: str | None = field(
         default_factory=lambda: os.getenv("SOMAAI_REDIS__PASSWORD")
@@ -56,19 +58,24 @@ class CacheConfig:
         except (ImportError, AttributeError):
             # Fallback to environment variables
             return cls(
-                redis_url=os.getenv("SOMAAI_REDIS__CACHE_URL", "redis://localhost:6379/2"),
+                redis_url=os.getenv(
+                    "SOMAAI_REDIS__CACHE_URL", "redis://localhost:6379/2"
+                ),
                 redis_password=os.getenv("SOMAAI_REDIS__PASSWORD"),
                 query_ttl=int(os.getenv("SOMAAI_CACHE__QUERY_TTL", "86400")),
                 embedding_ttl=int(os.getenv("SOMAAI_CACHE__EMBEDDING_TTL", "3600")),
                 retrieval_ttl=int(os.getenv("SOMAAI_CACHE__RETRIEVAL_TTL", "3600")),
                 session_ttl=int(os.getenv("SOMAAI_CACHE__SESSION_TTL", "3600")),
                 semantic_enabled=(
-                    os.getenv("SOMAAI_CACHE__SEMANTIC_ENABLED", "true").lower() == "true"
+                    os.getenv("SOMAAI_CACHE__SEMANTIC_ENABLED", "true").lower()
+                    == "true"
                 ),
                 similarity_threshold=float(
                     os.getenv("SOMAAI_CACHE__SIMILARITY_THRESHOLD", "0.92")
                 ),
-                embedding_dimension=int(os.getenv("SOMAAI_CACHE__EMBEDDING_DIM", "768")),
+                embedding_dimension=int(
+                    os.getenv("SOMAAI_CACHE__EMBEDDING_DIM", "768")
+                ),
                 namespace=os.getenv("SOMAAI_CACHE__NAMESPACE", "somaai"),
             )
 

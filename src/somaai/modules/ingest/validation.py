@@ -27,13 +27,13 @@ class ValidationIssue:
     severity: str  # "critical", "warning", "info"
     message: str
     suggestion: str = ""
-    
+
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         return {
             "severity": self.severity,
             "message": self.message,
-            "suggestion": self.suggestion
+            "suggestion": self.suggestion,
         }
 
 

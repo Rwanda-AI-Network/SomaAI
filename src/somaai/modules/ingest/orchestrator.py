@@ -174,9 +174,9 @@ class IngestionOrchestrator:
                     if isinstance(result.errors, list):
                         for err in result.errors:
                             if isinstance(err, dict):
-                                severity = err.get('severity', 'error')
-                                message = err.get('message', str(err))
-                                suggestion = err.get('suggestion', '')
+                                severity = err.get("severity", "error")
+                                message = err.get("message", str(err))
+                                suggestion = err.get("suggestion", "")
                                 error_details.append(
                                     f"[{severity.upper()}] {message}"
                                     + (f" - {suggestion}" if suggestion else "")
@@ -185,8 +185,10 @@ class IngestionOrchestrator:
                                 error_details.append(str(err))
                     else:
                         error_details.append(str(result.errors))
-                    
-                    detailed_error = f"Stage '{stage.name}' failed:\n" + "\n".join(error_details)
+
+                    detailed_error = f"Stage '{stage.name}' failed:\n" + "\n".join(
+                        error_details
+                    )
                     logger.error(detailed_error)
                     raise IngestionError(detailed_error)
 

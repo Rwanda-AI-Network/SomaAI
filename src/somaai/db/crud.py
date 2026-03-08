@@ -31,14 +31,15 @@ async def create_job(
 
     Returns:
         Created Job instance
-        
+
     Raises:
         ConflictError: If job with same ID already exists
         ValidationError: If required fields are missing or invalid
     """
     from sqlalchemy.exc import IntegrityError
+
     from somaai.exceptions import ConflictError, ValidationError
-    
+
     job = Job(
         id=job_id,
         task_name=task_name,
@@ -64,6 +65,7 @@ async def create_job(
         else:
             # Unknown constraint violation - log and re-raise
             import logging
+
             logging.getLogger(__name__).error(
                 "Database constraint violation",
                 extra={"job_id": job_id, "error": str(e)},
@@ -198,14 +200,15 @@ async def create_document(
 
     Returns:
         Created Document instance
-        
+
     Raises:
         ConflictError: If document with same ID or content_hash already exists
         ValidationError: If required fields are missing or invalid
     """
     from sqlalchemy.exc import IntegrityError
+
     from somaai.exceptions import ConflictError, ValidationError
-    
+
     doc = Document(
         id=doc_id,
         filename=filename,
@@ -236,6 +239,7 @@ async def create_document(
         else:
             # Unknown constraint violation - log and re-raise
             import logging
+
             logging.getLogger(__name__).error(
                 "Database constraint violation",
                 extra={"doc_id": doc_id, "error": str(e)},
@@ -420,14 +424,15 @@ async def get_all_grades(db: AsyncSession) -> list[Grade]:
 
 async def create_grade(db: AsyncSession, grade_data: dict) -> Grade:
     """Create a new grade.
-    
+
     Raises:
         ConflictError: If grade with same ID already exists
         ValidationError: If required fields are missing or invalid
     """
     from sqlalchemy.exc import IntegrityError
+
     from somaai.exceptions import ConflictError, ValidationError
-    
+
     grade = Grade(**grade_data)
     db.add(grade)
     try:
@@ -438,16 +443,19 @@ async def create_grade(db: AsyncSession, grade_data: dict) -> Grade:
         await db.rollback()
         error_msg = str(e).lower()
         if "duplicate key" in error_msg or "unique constraint" in error_msg:
-            raise ConflictError(f"Grade with ID '{grade_data.get('id')}' already exists")
+            raise ConflictError(
+                f"Grade with ID '{grade_data.get('id')}' already exists"
+            )
         elif "not null" in error_msg or "null value" in error_msg:
             raise ValidationError("Required field is missing")
         elif "foreign key" in error_msg:
             raise ValidationError("Referenced resource does not exist")
         else:
             import logging
+
             logging.getLogger(__name__).error(
                 "Database constraint violation",
-                extra={"grade_id": grade_data.get('id'), "error": str(e)},
+                extra={"grade_id": grade_data.get("id"), "error": str(e)},
                 exc_info=True,
             )
             raise ValidationError("Invalid data provided")
@@ -490,14 +498,15 @@ async def get_all_subjects(db: AsyncSession) -> list[Subject]:
 
 async def create_subject(db: AsyncSession, subject_data: dict) -> Subject:
     """Create a new subject.
-    
+
     Raises:
         ConflictError: If subject with same ID already exists
         ValidationError: If required fields are missing or invalid
     """
     from sqlalchemy.exc import IntegrityError
+
     from somaai.exceptions import ConflictError, ValidationError
-    
+
     subject = Subject(**subject_data)
     db.add(subject)
     try:
@@ -508,16 +517,19 @@ async def create_subject(db: AsyncSession, subject_data: dict) -> Subject:
         await db.rollback()
         error_msg = str(e).lower()
         if "duplicate key" in error_msg or "unique constraint" in error_msg:
-            raise ConflictError(f"Subject with ID '{subject_data.get('id')}' already exists")
+            raise ConflictError(
+                f"Subject with ID '{subject_data.get('id')}' already exists"
+            )
         elif "not null" in error_msg or "null value" in error_msg:
             raise ValidationError("Required field is missing")
         elif "foreign key" in error_msg:
             raise ValidationError("Referenced resource does not exist")
         else:
             import logging
+
             logging.getLogger(__name__).error(
                 "Database constraint violation",
-                extra={"subject_id": subject_data.get('id'), "error": str(e)},
+                extra={"subject_id": subject_data.get("id"), "error": str(e)},
                 exc_info=True,
             )
             raise ValidationError("Invalid data provided")
@@ -694,14 +706,15 @@ async def get_document_counts_by_subject(
 
 async def create_topic(db: AsyncSession, topic_id: str, topic_data: dict) -> Topic:
     """Create a new topic.
-    
+
     Raises:
         ConflictError: If topic with same ID already exists
         ValidationError: If required fields are missing or invalid
     """
     from sqlalchemy.exc import IntegrityError
+
     from somaai.exceptions import ConflictError, ValidationError
-    
+
     topic = Topic(id=topic_id, **topic_data)
     db.add(topic)
     try:
@@ -719,6 +732,7 @@ async def create_topic(db: AsyncSession, topic_id: str, topic_data: dict) -> Top
             raise ValidationError("Referenced resource does not exist")
         else:
             import logging
+
             logging.getLogger(__name__).error(
                 "Database constraint violation",
                 extra={"topic_id": topic_id, "error": str(e)},

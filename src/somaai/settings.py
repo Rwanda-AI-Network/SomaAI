@@ -12,6 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class AppEnv(str, Enum):
     """Application environment."""
+
     DEVELOPMENT = "dev"
     TESTING = "test"
     PRODUCTION = "prod"
@@ -19,6 +20,7 @@ class AppEnv(str, Enum):
 
 class IngestSettings(BaseSettings):
     """Ingestion pipeline configurations."""
+
     max_file_size: int = 10 * 1024 * 1024  # 10MB
     validation_threshold: int = 1 * 1024 * 1024  # 1MB
     max_chunk_size: int = 1500
@@ -46,6 +48,7 @@ class IngestSettings(BaseSettings):
 
 class CacheSettings(BaseSettings):
     """RAG and Generic Cache configurations."""
+
     query_ttl: int = 86400  # 24 hours
     embedding_ttl: int = 3600  # 1 hour
     retrieval_ttl: int = 3600
@@ -58,6 +61,7 @@ class CacheSettings(BaseSettings):
 
 class ServerSettings(BaseSettings):
     """Web server configurations."""
+
     host: str = "0.0.0.0"
     port: int = 8000
     debug: bool = False
@@ -67,6 +71,7 @@ class ServerSettings(BaseSettings):
 
 class DatabaseSettings(BaseSettings):
     """Database connection and pooling configurations."""
+
     url: str = Field(default="sqlite+aiosqlite:///./somaai.db")
     pool_size: int = 10
     max_overflow: int = 20
@@ -76,6 +81,7 @@ class DatabaseSettings(BaseSettings):
 
 class RedisSettings(BaseSettings):
     """Redis connection configurations."""
+
     url: str = "redis://localhost:6379/0"
     jobs_url: str = "redis://localhost:6379/1"
     cache_url: str = "redis://localhost:6379/2"
@@ -84,6 +90,7 @@ class RedisSettings(BaseSettings):
 
 class QdrantSettings(BaseSettings):
     """Vector database (Qdrant) configurations."""
+
     url: str = "http://localhost:6333"
     api_key: SecretStr | None = None
     collection_name: str = "somaai_documents"
@@ -92,6 +99,7 @@ class QdrantSettings(BaseSettings):
 
 class StorageSettings(BaseSettings):
     """Object storage configurations (MinIO/S3)."""
+
     backend: Literal["minio", "s3"] = "minio"
 
     # MinIO
@@ -111,6 +119,7 @@ class StorageSettings(BaseSettings):
 
 class LLMSettings(BaseSettings):
     """LLM Backend configurations."""
+
     backend: str = "groq"
     groq_api_key: SecretStr | None = None
     groq_model: str = "llama3.2"
@@ -122,6 +131,7 @@ class LLMSettings(BaseSettings):
 
 class SecuritySettings(BaseSettings):
     """Security and Session configurations."""
+
     require_api_key: bool = False
     rate_limit_ask: str = "20/hour"
     rate_limit_create_conversation: str = "50/hour"
@@ -173,7 +183,9 @@ class Settings(BaseSettings):
             db_host = self.db.url.split("@")[-1] if "@" in self.db.url else "sqlite"
             logger.info(
                 "Config Loaded [%s] - DB: %s, Debug: %s",
-                self.env.value, db_host, self.server.debug
+                self.env.value,
+                db_host,
+                self.server.debug,
             )
         return self
 

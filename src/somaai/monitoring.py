@@ -285,9 +285,7 @@ def setup_metrics(settings) -> None:
         feature_flags.labels(feature="input_validation").set(
             1 if settings.security.rag_enable_input_validation else 0
         )
-        feature_flags.labels(feature="debug").set(
-            1 if settings.server.debug else 0
-        )
+        feature_flags.labels(feature="debug").set(1 if settings.server.debug else 0)
         feature_flags.labels(feature="require_api_key").set(
             1 if settings.security.require_api_key else 0
         )

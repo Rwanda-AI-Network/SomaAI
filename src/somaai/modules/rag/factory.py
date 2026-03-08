@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 from somaai.modules.rag.pipelines import RAGPipeline
 from somaai.providers.llm import LLMClient
 from somaai.settings import Settings

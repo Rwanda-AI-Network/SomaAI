@@ -417,7 +417,7 @@ class ChatService:
         responses = []
         for msg in page_messages:
             # Get pre-loaded citations from batch
-            citations = citations_by_message.get(msg.id, [])
+            citations = citations_by_message.get(cast(str, msg.id), [])
 
             # Map enhancements
             enhancements = None

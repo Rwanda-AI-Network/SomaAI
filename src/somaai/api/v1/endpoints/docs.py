@@ -77,7 +77,7 @@ async def get_document_view(
         raise HTTPException(status_code=404, detail="Document not found")
 
     storage = get_storage()
-    
+
     # Check file exists BEFORE starting stream (can't raise HTTP errors mid-stream)
     try:
         # Note: Not all storage backends implement exists(), so we'll handle in stream
@@ -92,7 +92,7 @@ async def get_document_view(
             status_code=503,
             detail="Storage service temporarily unavailable",
         )
-    
+
     suffix = Path(doc.filename).suffix.lower()
     media_type = _MIME_TYPES.get(suffix, "application/octet-stream")
 

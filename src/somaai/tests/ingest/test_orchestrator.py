@@ -13,6 +13,7 @@ async def test_ingestion_orchestrator_flow():
 
     # 1. Setup Environment
     from somaai.settings import LLMSettings
+
     settings = Settings(llm=LLMSettings(backend="mock"))
 
     # Create a temporary test file if not exists, or use existing one

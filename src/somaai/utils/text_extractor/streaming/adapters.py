@@ -17,9 +17,9 @@ logger = logging.getLogger(__name__)
 
 class MemoryAdapter:
     """Adapter that buffers stream to RAM.
-    
+
     Fast but memory-intensive. Use for small files (<10MB).
-    
+
     Strategy: Read entire stream into BytesIO.
     Memory: O(file_size)
     Speed: Fastest
@@ -32,11 +32,11 @@ class MemoryAdapter:
 
     async def adapt(self, stream: BinaryIO, size_hint: int | None = None) -> BinaryIO:
         """Buffer stream to memory.
-        
+
         Args:
             stream: Input stream
             size_hint: Expected size (for pre-allocation)
-        
+
         Returns:
             BytesIO (seekable)
         """
@@ -65,9 +65,9 @@ class MemoryAdapter:
 
 class DiskAdapter:
     """Adapter that buffers stream to disk.
-    
+
     Slower but handles large files. Use for files >100MB.
-    
+
     Strategy: Stream to temp file in chunks.
     Memory: O(chunk_size) = constant
     Speed: Slower (disk I/O)
@@ -83,7 +83,7 @@ class DiskAdapter:
         chunk_size: int = 64 * 1024,
     ):
         """Initialize disk adapter.
-        
+
         Args:
             doc_id: Document identifier
             temp_dir: Custom temp directory
@@ -97,11 +97,11 @@ class DiskAdapter:
 
     async def adapt(self, stream: BinaryIO, size_hint: int | None = None) -> BinaryIO:
         """Buffer stream to disk.
-        
+
         Args:
             stream: Input stream
             size_hint: Expected size (for logging)
-        
+
         Returns:
             File stream (seekable)
         """
@@ -140,7 +140,7 @@ class DiskAdapter:
         result = await asyncio.to_thread(open, temp_path, "rb")
 
         # Store path for cleanup
-        result._temp_path = temp_path  # type: ignore
+        result._temp_path = temp_path
 
         return result
 
@@ -150,9 +150,9 @@ class DiskAdapter:
 
 class SpoolAdapter:
     """Adapter that uses SpooledTemporaryFile (RAM → disk spillover).
-    
+
     Best balance for medium files (10-100MB). Starts in RAM, spills to disk.
-    
+
     Strategy: Use SpooledTemporaryFile with threshold.
     Memory: O(min(file_size, threshold))
     Speed: Fast for small, acceptable for large
@@ -167,7 +167,7 @@ class SpoolAdapter:
         chunk_size: int = 64 * 1024,
     ):
         """Initialize spool adapter.
-        
+
         Args:
             doc_id: Document identifier
             threshold: Bytes before spilling to disk
@@ -179,11 +179,11 @@ class SpoolAdapter:
 
     async def adapt(self, stream: BinaryIO, size_hint: int | None = None) -> BinaryIO:
         """Buffer stream with spillover.
-        
+
         Args:
             stream: Input stream
             size_hint: Expected size
-        
+
         Returns:
             SpooledTemporaryFile (seekable)
         """
@@ -208,7 +208,7 @@ class SpoolAdapter:
         await asyncio.to_thread(spool.seek, 0)
 
         # Log if spilled
-        if spool._rolled:  # type: ignore
+        if spool._rolled:
             logger.info(
                 f"[{self._doc_id}] Spilled to disk: {bytes_written:,} bytes "
                 f"(exceeded {self._threshold:,} threshold)"
@@ -224,12 +224,12 @@ class SpoolAdapter:
 
 class AdapterFactory:
     """Factory for creating adapters based on file size (Strategy pattern).
-    
+
     Automatically selects the best adapter strategy:
     - <10MB: MemoryAdapter (fastest)
     - 10-100MB: SpoolAdapter (balanced)
     - >100MB: DiskAdapter (handles large files)
-    
+
     Example:
         >>> factory = AdapterFactory()
         >>> adapter = factory.create(size_hint=50_000_000)
@@ -248,12 +248,12 @@ class AdapterFactory:
         **kwargs,
     ):
         """Create adapter based on size.
-        
+
         Args:
             size_hint: Expected file size
             force_strategy: Force specific strategy ('memory', 'disk', 'spool')
             **kwargs: Adapter-specific options
-        
+
         Returns:
             Adapter instance
         """
@@ -283,14 +283,11 @@ class AdapterFactory:
     @classmethod
     def configure_thresholds(cls, small: int, large: int) -> None:
         """Configure size thresholds.
-        
+
         Args:
             small: Small file threshold (bytes)
             large: Large file threshold (bytes)
         """
         cls.SMALL_FILE_THRESHOLD = small
         cls.LARGE_FILE_THRESHOLD = large
-        logger.info(
-            f"Adapter thresholds configured: "
-            f"small={small:,}, large={large:,}"
-        )
+        logger.info(f"Adapter thresholds configured: small={small:,}, large={large:,}")

@@ -109,7 +109,7 @@ async def _invalidate_l2() -> None:
         scan_iter = redis.scan_iter(match=f"{_L2_PREFIX}*")
 
         # If it's a mock, it won't have __aiter__, skip gracefully
-        if not hasattr(scan_iter, '__aiter__'):
+        if not hasattr(scan_iter, "__aiter__"):
             return
 
         keys = [k async for k in scan_iter]
@@ -347,7 +347,7 @@ class MetaService:
 
     async def create_grade(self, grade_in: GradeCreate) -> GradeResponse:
         """Create a new grade and invalidate cache.
-        
+
         Raises:
             ConflictError: If grade with same ID already exists
         """
@@ -392,7 +392,7 @@ class MetaService:
 
     async def create_subject(self, subject_in: SubjectCreate) -> SubjectResponse:
         """Create a new subject and invalidate cache.
-        
+
         Raises:
             ConflictError: If subject with same ID already exists
         """
@@ -437,7 +437,7 @@ class MetaService:
 
     async def create_topic(self, topic_in: TopicCreate) -> TopicResponse:
         """Create a new topic and invalidate cache.
-        
+
         Raises:
             ConflictError: If topic with same ID already exists
         """

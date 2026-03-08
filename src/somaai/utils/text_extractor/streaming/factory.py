@@ -92,9 +92,13 @@ class ManagedStream:
             if temp_path.exists():
                 try:
                     await asyncio.to_thread(temp_path.unlink)
-                    logger.debug(f"[{self.doc_id}] Deleted adapter temp file: {temp_path}")
+                    logger.debug(
+                        "[%s] Deleted adapter temp file: %s", self.doc_id, temp_path
+                    )
                 except Exception as e:
-                    logger.warning(f"[{self.doc_id}] Failed to delete adapter temp: {e}")
+                    logger.warning(
+                        "[%s] Failed to delete adapter temp: %s", self.doc_id, e
+                    )
 
     async def __aenter__(self) -> Self:
         """Enter async context."""
@@ -236,7 +240,8 @@ class StreamFactory:
 
             logger.info(
                 "[%s] Stream adapted using %s strategy",
-                doc_id, adapter.get_strategy_name()
+                doc_id,
+                adapter.get_strategy_name(),
             )
 
         # Create managed stream
@@ -269,7 +274,7 @@ class StreamFactory:
             ...     backend=settings.storage.backend,
             ...     bucket=settings.storage.s3_bucket,
             ...     endpoint=(
-            ...         settings.storage.minio_endpoint 
+            ...         settings.storage.minio_endpoint
             ...         if backend == 'minio' else None
             ...     ),
             ...     access_key=settings.storage.s3_access_key,

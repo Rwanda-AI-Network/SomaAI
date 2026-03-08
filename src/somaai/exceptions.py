@@ -25,7 +25,9 @@ def validation_exception(
     detail: str = "Validation failed",
 ) -> HTTPException:
     """Create a validation HTTP exception."""
-    return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail)
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail
+    )
 
 
 class ConflictError(SomaAIError):

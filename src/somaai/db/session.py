@@ -14,11 +14,7 @@ from somaai.settings import settings
 logger = logging.getLogger(__name__)
 
 # Create async engine
-db_host = (
-    settings.db.url.split("@")[-1]
-    if "@" in settings.db.url
-    else "local/sqlite"
-)
+db_host = settings.db.url.split("@")[-1] if "@" in settings.db.url else "local/sqlite"
 logger.debug("Connecting to DB: %s", db_host)
 
 # SQLite uses StaticPool which does not accept pool_size/max_overflow/pool_timeout.

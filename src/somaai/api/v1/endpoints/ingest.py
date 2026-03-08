@@ -98,7 +98,9 @@ async def ingest_document(
         if file.size > MAX_FILE_SIZE:
             raise HTTPException(
                 status_code=400,
-                detail=f"File too large. Maximum size: {MAX_FILE_SIZE // (1024 * 1024)}MB",
+                detail=(
+                    f"File too large. Maximum size: {MAX_FILE_SIZE // (1024 * 1024)}MB"
+                ),
             )
 
     try:

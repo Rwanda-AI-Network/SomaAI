@@ -42,9 +42,9 @@ try:
         return _limiter.limit(rule)
 
 except ImportError:
-    _limiter = None  # type: ignore[assignment]
+    _limiter = None
 
-    def _rate_limit(rule: str) -> Callable:  # type: ignore[misc]
+    def _rate_limit(rule: str) -> Callable:
         """No-op rate limit decorator when slowapi is not installed."""
         return lambda f: f
 
@@ -305,12 +305,17 @@ async def ask_question(
             # Qdrant or external service connection failure
             error_str = str(e).lower()
             if "qdrant" in error_str:
-                detail = "Vector search service temporarily unavailable. Please try again shortly."
+                detail = (
+                    "Vector search service temporarily unavailable. "
+                    "Please try again shortly."
+                )
             elif "redis" in error_str:
-                detail = "Cache service temporarily unavailable. Please try again shortly."
+                detail = (
+                    "Cache service temporarily unavailable. Please try again shortly."
+                )
             else:
                 detail = "AI service temporarily unavailable. Please try again shortly."
-            
+
             logger.error(
                 "External service connection failed",
                 extra={

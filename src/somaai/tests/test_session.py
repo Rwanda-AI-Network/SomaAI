@@ -32,10 +32,12 @@ class TestSessionMiddleware:
 
         resp1 = client.get("/api/v1/chat/conversations")
         cookie1 = resp1.cookies.get("somaai_session")
+        assert cookie1
         actor_1 = _memory_store[cookie1]["actor_id"]
 
         # Second request with same client reuses cookie
         client.get("/api/v1/chat/conversations")
+        assert cookie1
         assert _memory_store[cookie1]["actor_id"] == actor_1
 
     def test_health_endpoint_skips_session(self, client: TestClient):

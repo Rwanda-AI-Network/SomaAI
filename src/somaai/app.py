@@ -76,10 +76,10 @@ def create_app() -> FastAPI:
     )
 
     setup_middleware(app)
-    
+
     # Add custom error handlers
     _setup_error_handlers(app)
-    
+
     app.include_router(health_router)
     app.include_router(api_router, prefix="/api")
 
@@ -99,7 +99,7 @@ def _setup_error_handlers(app: FastAPI) -> None:
     """Setup custom error handlers for the application."""
     from fastapi.responses import JSONResponse
     from starlette.requests import Request
-    
+
     # Rate limit error handler
     try:
         from slowapi.errors import RateLimitExceeded

@@ -43,9 +43,7 @@ class ConversationService:
         if not await self.meta_service.check_exists_grade(grade):
             valid_grades = await self.meta_service.get_grades()
             grade_list = ", ".join(g.id for g in valid_grades[:10])  # Limit to 10
-            raise ValueError(
-                f"Invalid grade '{grade}'. Valid grades: {grade_list}"
-            )
+            raise ValueError(f"Invalid grade '{grade}'. Valid grades: {grade_list}")
         if subject != "general" and not await self.meta_service.check_exists_subject(
             subject
         ):

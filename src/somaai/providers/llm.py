@@ -117,9 +117,13 @@ def get_llm(settings: Settings, fallback_to_mock: bool = False) -> LLMClient:
     try:
         if backend == "openai":
             if not settings.llm.openai_api_key:
-                raise ValueError("SOMAAI_LLM__OPENAI_API_KEY is required for OpenAI backend")
+                raise ValueError(
+                    "SOMAAI_LLM__OPENAI_API_KEY is required for OpenAI backend"
+                )
             if not settings.llm.openai_model:
-                raise ValueError("SOMAAI_LLM__OPENAI_MODEL is required for OpenAI backend")
+                raise ValueError(
+                    "SOMAAI_LLM__OPENAI_MODEL is required for OpenAI backend"
+                )
             return OpenAILLMProvider(
                 api_key=settings.llm.openai_api_key.get_secret_value(),
                 model=settings.llm.openai_model,
@@ -127,7 +131,9 @@ def get_llm(settings: Settings, fallback_to_mock: bool = False) -> LLMClient:
 
         if backend == "groq":
             if not settings.llm.groq_api_key:
-                raise ValueError("SOMAAI_LLM__GROQ_API_KEY is required for Groq backend")
+                raise ValueError(
+                    "SOMAAI_LLM__GROQ_API_KEY is required for Groq backend"
+                )
             if not settings.llm.groq_model:
                 raise ValueError("SOMAAI_LLM__GROQ_MODEL is required for Groq backend")
             return GroqLLMProvider(

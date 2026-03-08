@@ -145,6 +145,7 @@ def client():
 
     def get_test_settings():
         from somaai.settings import LLMSettings
+
         return Settings(llm=LLMSettings(backend="mock"))
 
     app.dependency_overrides[get_settings] = get_test_settings

@@ -32,7 +32,7 @@ class PdfStructuredStrategy(BaseExtractionStrategy):
             try:
                 if hasattr(file_stream, "seek"):
                     file_stream.seek(0)
-            except (OSError, IOError) as e:
+            except OSError as e:
                 logger.debug(f"Stream not seekable, continuing anyway: {e}")
 
             # Read into memory for pdfplumber

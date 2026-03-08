@@ -411,7 +411,7 @@ class QdrantStore(VectorStore):
 
         Returns:
             List of documents with scores
-            
+
         Raises:
             TimeoutError: If search takes longer than 5 seconds
             ConnectionError: If Qdrant connection fails
@@ -451,7 +451,7 @@ class QdrantStore(VectorStore):
         )
 
         store = await self._ensure_store()
-        
+
         # Add timeout for vector search (5 seconds)
         try:
             async with asyncio.timeout(5):

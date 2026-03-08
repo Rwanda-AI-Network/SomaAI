@@ -84,21 +84,24 @@ def register_error_handlers(app: FastAPI) -> None:
         request: Request, exc: IntegrityError
     ) -> JSONResponse:
         """Handle unhandled SQLAlchemy IntegrityError as safety net.
-        
+
         This catches any IntegrityError that wasn't properly handled
         in the CRUD layer and returns a proper 409 or 400 response.
         """
-        error_msg = str(exc.orig) if hasattr(exc, 'orig') else str(exc)
-        
+        error_msg = str(exc.orig) if hasattr(exc, "orig") else str(exc)
+
         # Check if it's a duplicate key / unique constraint violation
-        if "duplicate key" in error_msg.lower() or "unique constraint" in error_msg.lower():
+        if (
+            "duplicate key" in error_msg.lower()
+            or "unique constraint" in error_msg.lower()
+        ):
             logger.warning("Unhandled duplicate key error: %s", error_msg)
             return _error_response(
                 status.HTTP_409_CONFLICT,
                 "Resource already exists. Duplicate key violation.",
                 "conflict",
             )
-        
+
         # Check if it's a foreign key violation
         if "foreign key" in error_msg.lower():
             logger.warning("Foreign key constraint violation: %s", error_msg)
@@ -107,7 +110,7 @@ def register_error_handlers(app: FastAPI) -> None:
                 "Invalid reference. Related resource does not exist.",
                 "validation_error",
             )
-        
+
         # Check if it's a NOT NULL violation
         if "not null" in error_msg.lower() or "null value" in error_msg.lower():
             logger.warning("NOT NULL constraint violation: %s", error_msg)
@@ -116,7 +119,7 @@ def register_error_handlers(app: FastAPI) -> None:
                 "Missing required field.",
                 "validation_error",
             )
-        
+
         # Generic integrity error
         logger.error("Database integrity error: %s", error_msg, exc_info=True)
         return _error_response(
@@ -155,4 +158,3 @@ def register_error_handlers(app: FastAPI) -> None:
             "An internal error occurred. Please try again.",
             "internal_error",
         )
-

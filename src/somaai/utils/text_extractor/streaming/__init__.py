@@ -12,7 +12,7 @@ Architecture:
 
 Example:
     >>> from somaai.utils.text_extractor.streaming import StreamFactory
-    >>> 
+    >>>
     >>> # Create stream from any source
     >>> async with StreamFactory.create("s3://bucket/file.pdf") as stream:
     ...     # Use with any extractor

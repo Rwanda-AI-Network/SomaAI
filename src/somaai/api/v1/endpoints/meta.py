@@ -83,8 +83,13 @@ async def create_grade(
     service: MetaService = Depends(_get_meta_service),
 ):
     """Create a new grade level."""
-    from somaai.exceptions import ConflictError, ValidationError, conflict_exception, validation_exception
-    
+    from somaai.exceptions import (
+        ConflictError,
+        ValidationError,
+        conflict_exception,
+        validation_exception,
+    )
+
     try:
         return await service.create_grade(grade_in)
     except ConflictError as e:
@@ -125,8 +130,13 @@ async def create_subject(
     service: MetaService = Depends(_get_meta_service),
 ):
     """Create a new subject."""
-    from somaai.exceptions import ConflictError, ValidationError, conflict_exception, validation_exception
-    
+    from somaai.exceptions import (
+        ConflictError,
+        ValidationError,
+        conflict_exception,
+        validation_exception,
+    )
+
     try:
         return await service.create_subject(subject_in)
     except ConflictError as e:
@@ -167,8 +177,13 @@ async def create_topic(
     service: MetaService = Depends(_get_meta_service),
 ):
     """Create a new topic."""
-    from somaai.exceptions import ConflictError, ValidationError, conflict_exception, validation_exception
-    
+    from somaai.exceptions import (
+        ConflictError,
+        ValidationError,
+        conflict_exception,
+        validation_exception,
+    )
+
     try:
         return await service.create_topic(topic_in)
     except ConflictError as e:

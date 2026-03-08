@@ -197,7 +197,7 @@ class TextExtractor:
                     try:
                         if hasattr(stream, "seek"):
                             stream.seek(0)
-                    except (OSError, IOError) as e:
+                    except OSError as e:
                         # Stream is not seekable (e.g., HTTP response stream)
                         # We can't retry with OCR without re-reading the file
                         logger.error(
