@@ -60,7 +60,7 @@ router = APIRouter(prefix="/chat/conversations", tags=["chat"])
     response_model=ConversationResponse,
     status_code=201,
 )
-@_rate_limit(settings.security.rate_limit_create_conversation)
+@_rate_limit(settings.rate_limit_create_conversation)
 async def create_conversation(
     request: Request,
     data: CreateConversationRequest,
@@ -239,7 +239,7 @@ async def list_messages(
     response_model=ChatResponse,
     status_code=201,
 )
-@_rate_limit(settings.security.rate_limit_ask)
+@_rate_limit(settings.rate_limit_ask)
 async def ask_question(
     conversation_id: str,
     data: ChatRequest,
@@ -362,32 +362,32 @@ async def ask_question(
         conversation_id_ctx.reset(conv_token)
 
 
-@router.post(
-    "/{conversation_id}/ask/stream",
-    tags=["chat"],
-    status_code=501,
-)
-async def ask_question_stream(
-    conversation_id: str,
-    data: ChatRequest,
-    chat_service: ChatService = Depends(get_chat_service),
-    actor_id: str = Depends(get_actor_id),
-    db: AsyncSession = Depends(get_session),
-):
-    """Ask a question with streaming response (v2 Placeholder).
+# @router.post(
+#     "/{conversation_id}/ask/stream",
+#     tags=["chat"],
+#     status_code=501,
+# )
+# async def ask_question_stream(
+#     conversation_id: str,
+#     data: ChatRequest,
+#     chat_service: ChatService = Depends(get_chat_service),
+#     actor_id: str = Depends(get_actor_id),
+#     db: AsyncSession = Depends(get_session),
+# ):
+#     """Ask a question with streaming response (v2 Placeholder).
 
-    Currently returns 501 Not Implemented.
-    """
-    # Verify ownership before returning 501
-    convo_service = ConversationService(db)
-    convo = await convo_service.get_owned(conversation_id, actor_id)
-    if not convo:
-        raise not_found_exception("Conversation not found")
+#     Currently returns 501 Not Implemented.
+#     """
+#     # Verify ownership before returning 501
+#     convo_service = ConversationService(db)
+#     convo = await convo_service.get_owned(conversation_id, actor_id)
+#     if not convo:
+#         raise not_found_exception("Conversation not found")
 
-    raise HTTPException(
-        status_code=501,
-        detail="Streaming chat (v2) is not yet implemented in this version.",
-    )
+#     raise HTTPException(
+#         status_code=501,
+#         detail="Streaming chat (v2) is not yet implemented in this version.",
+#     )
 
 
 # ── Message retrieval ─────────────────────────────────────────────

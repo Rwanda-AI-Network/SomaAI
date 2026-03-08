@@ -295,30 +295,14 @@ class ExtractionStage(PipelineStage):
 
                 managed_stream = await StreamFactory.create_from_storage(
                     storage_key=ctx.storage_key,
-                    backend=settings.storage.backend,
-                    bucket=(
-                        settings.storage.minio_bucket
-                        if settings.storage.backend == "minio"
-                        else settings.storage.s3_bucket
-                    ),
+                    backend=settings.storage_backend,
+                    bucket=settings.minio_bucket,
                     endpoint=(
-                        f"{'https' if settings.storage.minio_secure else 'http'}://{settings.storage.minio_endpoint}"
-                        if settings.storage.backend == "minio"
-                        else None
+                        f"{'https' if settings.minio_secure else 'http'}://{settings.minio_endpoint}"
                     ),
-                    access_key=(
-                        settings.storage.minio_access_key
-                        if settings.storage.backend == "minio"
-                        else settings.storage.s3_access_key
-                    ),
+                    access_key=settings.minio_access_key,
                     secret_key=(
-                        settings.storage.minio_secret_key.get_secret_value()
-                        if settings.storage.backend == "minio"
-                        else (
-                            settings.storage.s3_secret_key.get_secret_value()
-                            if settings.storage.s3_secret_key
-                            else None
-                        )
+                        settings.minio_secret_key.get_secret_value()
                     ),
                     doc_id=ctx.doc_id,
                     ensure_seekable=True,  # Auto-adapt if needed

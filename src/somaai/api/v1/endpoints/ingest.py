@@ -34,8 +34,8 @@ router = APIRouter(prefix="/ingest", tags=["ingest"])
 
 # Allowed file extensions
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".md"}
-MAX_FILE_SIZE = settings.ingest.max_file_size
-VALIDATION_THRESHOLD = settings.ingest.validation_threshold
+MAX_FILE_SIZE = settings.max_file_size
+VALIDATION_THRESHOLD = settings.ingest_validation_threshold
 
 
 def validate_file(file: UploadFile) -> None:

@@ -77,7 +77,8 @@ class VectorStorageStage(PipelineStage):
             logger.info(f"Stored {len(ctx.stored_chunk_ids)} chunks successfully")
 
             # Also add to BM25 index if hybrid search enabled
-            if ctx.settings.qdrant.rag_enable_hybrid_search:
+            # NOTE: Hybrid search (BM25) disabled for MVP — see bm25_index.py
+            if False:
                 try:
                     from somaai.modules.knowledge.bm25_index import get_bm25_index
 

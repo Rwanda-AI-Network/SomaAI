@@ -92,7 +92,7 @@ class IngestionOrchestrator:
 
         # Shared dependencies
         store = QdrantStore(self.settings)
-        chunker = SemanticChunker(max_chunk_size=self.settings.ingest.max_chunk_size)
+        chunker = SemanticChunker(max_chunk_size=self.settings.max_chunk_size)
 
         # Build ordered pipeline
         return [

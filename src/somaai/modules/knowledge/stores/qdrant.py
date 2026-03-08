@@ -57,12 +57,12 @@ def get_qdrant_client(settings: Settings) -> QdrantClient:
     """
     global _QDRANT_CLIENT
     if _QDRANT_CLIENT is None:
-        logger.info(f"Creating Qdrant client: {settings.qdrant.url}")
+        logger.info(f"Creating Qdrant client: {settings.qdrant_url}")
         _QDRANT_CLIENT = QdrantClient(
-            url=settings.qdrant.url,
+            url=settings.qdrant_url,
             api_key=(
-                settings.qdrant.api_key.get_secret_value()
-                if settings.qdrant.api_key
+                settings.qdrant_api_key.get_secret_value()
+                if settings.qdrant_api_key
                 else None
             ),
             timeout=30,
@@ -144,7 +144,7 @@ class QdrantStore(VectorStore):
         if self._store is not None:
             return self._store
 
-        collection_name = self.settings.qdrant.collection_name
+        collection_name = self.settings.qdrant_collection
 
         # Ensure collection exists — sync I/O → thread
         exists = await asyncio.to_thread(self.client.collection_exists, collection_name)
@@ -286,7 +286,7 @@ class QdrantStore(VectorStore):
 
                 results = await asyncio.to_thread(
                     self.client.scroll,
-                    collection_name=self.settings.qdrant.collection_name,
+                    collection_name=self.settings.qdrant_collection,
                     scroll_filter=Filter(
                         should=[
                             FieldCondition(
@@ -336,7 +336,7 @@ class QdrantStore(VectorStore):
         try:
             results = await asyncio.to_thread(
                 self.client.scroll,
-                collection_name=self.settings.qdrant.collection_name,
+                collection_name=self.settings.qdrant_collection,
                 scroll_filter=Filter(
                     must=[
                         FieldCondition(
@@ -363,7 +363,7 @@ class QdrantStore(VectorStore):
         try:
             results = await asyncio.to_thread(
                 self.client.scroll,
-                collection_name=self.settings.qdrant.collection_name,
+                collection_name=self.settings.qdrant_collection,
                 scroll_filter=Filter(
                     must=[
                         FieldCondition(
@@ -380,7 +380,7 @@ class QdrantStore(VectorStore):
             if point_ids:
                 await asyncio.to_thread(
                     self.client.delete,
-                    collection_name=self.settings.qdrant.collection_name,
+                    collection_name=self.settings.qdrant_collection,
                     points_selector=point_ids,
                 )
 
@@ -522,7 +522,7 @@ class QdrantStore(VectorStore):
         try:
             points = await asyncio.to_thread(
                 self.client.retrieve,
-                collection_name=self.settings.qdrant.collection_name,
+                collection_name=self.settings.qdrant_collection,
                 ids=ids,
                 with_payload=True,
                 with_vectors=False,

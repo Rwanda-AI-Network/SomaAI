@@ -5,18 +5,18 @@ x-app-common: &app-common
   env_file:
     - ../.env
   environment:
-    - SOMAAI_DB__URL=postgresql+asyncpg://somaai:somaai@postgres:5432/somaai
-    - SOMAAI_REDIS__URL=redis://redis:6379/0
-    - SOMAAI_REDIS__JOBS_URL=redis://redis:6379/1
-    - SOMAAI_REDIS__CACHE_URL=redis://redis:6379/2
-    - SOMAAI_QDRANT__URL=http://qdrant:6333
-    - SOMAAI_STORAGE__BACKEND=minio
-    - SOMAAI_STORAGE__MINIO_ENDPOINT=minio:9000
-    - SOMAAI_STORAGE__MINIO_ACCESS_KEY=minioadmin
-    - SOMAAI_STORAGE__MINIO_SECRET_KEY=minioadmin
-    - SOMAAI_STORAGE__MINIO_BUCKET=somaai-documents
-    - SOMAAI_STORAGE__MINIO_SECURE=false
-    - SOMAAI_SERVER__DEBUG=true
+    - SOMAAI_DATABASE_URL=postgresql+asyncpg://somaai:somaai@postgres:5432/somaai
+    - SOMAAI_REDIS_URL=redis://redis:6379/0
+    - SOMAAI_REDIS_JOBS_URL=redis://redis:6379/1
+    - SOMAAI_REDIS_CACHE_URL=redis://redis:6379/2
+    - SOMAAI_QDRANT_URL=http://qdrant:6333
+    - SOMAAI_STORAGE_BACKEND=minio
+    - SOMAAI_MINIO_ENDPOINT=minio:9000
+    - SOMAAI_MINIO_ACCESS_KEY=minioadmin
+    - SOMAAI_MINIO_SECRET_KEY=minioadmin
+    - SOMAAI_MINIO_BUCKET=somaai-documents
+    - SOMAAI_MINIO_SECURE=false
+    - SOMAAI_DEBUG=true
     - SOMAAI_ENV=dev
   depends_on:
     postgres:

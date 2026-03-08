@@ -102,8 +102,8 @@ async def get_general_redis() -> aioredis.Redis:
     if _REDIS_GENERAL is None:
         from somaai.settings import settings
 
-        logger.info(f"Creating general Redis client: {settings.redis.url}")
-        _REDIS_GENERAL = await get_redis_client(settings.redis.url)
+        logger.info(f"Creating general Redis client: {settings.redis_url}")
+        _REDIS_GENERAL = await get_redis_client(settings.redis_url)
     return _REDIS_GENERAL
 
 
@@ -117,7 +117,7 @@ async def get_jobs_redis() -> aioredis.Redis:
     if _REDIS_JOBS is None:
         from somaai.settings import settings
 
-        url = settings.redis.jobs_url
+        url = settings.redis_jobs_url
         logger.info(f"Creating jobs Redis client: {url}")
         _REDIS_JOBS = await get_redis_client(url)
     return _REDIS_JOBS
@@ -133,7 +133,7 @@ async def get_cache_redis() -> aioredis.Redis:
     if _REDIS_CACHE is None:
         from somaai.settings import settings
 
-        url = settings.redis.cache_url
+        url = settings.redis_cache_url
         logger.info(f"Creating cache Redis client: {url}")
         _REDIS_CACHE = await get_redis_client(url, decode_responses=True)
     return _REDIS_CACHE

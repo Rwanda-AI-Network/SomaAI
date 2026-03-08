@@ -50,7 +50,7 @@ def _get_redis_settings():
     from somaai.settings import settings
 
     # Parse Redis URL for jobs database
-    redis_url = settings.redis.jobs_url
+    redis_url = settings.redis_jobs_url
     if "://" in redis_url:
         parts = redis_url.split("://")[1]
         host_port = parts.split("/")[0]
@@ -65,8 +65,8 @@ def _get_redis_settings():
         port=port,
         database=db,
         password=(
-            settings.redis.password.get_secret_value()
-            if settings.redis.password
+            settings.redis_password.get_secret_value()
+            if settings.redis_password
             else None
         ),
     )

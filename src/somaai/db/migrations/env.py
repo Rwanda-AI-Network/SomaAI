@@ -18,7 +18,7 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    url = settings.db.url
+    url = settings.database_url
     if url.startswith("sqlite+aiosqlite"):
         return url.replace("sqlite+aiosqlite", "sqlite")
     if "+asyncpg" in url:

@@ -24,18 +24,16 @@ async def lifespan(app: FastAPI):
     await init_db()
 
     # Security audit: warn if API key auth is disabled in non-debug mode
-    if not settings.security.require_api_key and not settings.server.debug:
+    if not settings.require_api_key and not settings.debug:
         startup_logger.warning(
             "⚠️  API key authentication is DISABLED in non-debug mode. "
             "Set REQUIRE_API_KEY=true for production deployments."
         )
 
-    from somaai.settings import AppEnv
-
-    if settings.env != AppEnv.TESTING:
+    if not settings.is_testing:
         get_embeddings_model(settings)
         # Use fallback_to_mock in debug mode to avoid startup crashes
-        app.state.llm = get_llm(settings, fallback_to_mock=settings.server.debug)
+        app.state.llm = get_llm(settings, fallback_to_mock=settings.debug)
     else:
         # In tests, use MockLLMProvider to avoid external calls
         from somaai.providers.llm import MockLLMProvider
@@ -70,8 +68,8 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title=settings.app_name,
-        version=settings.server.version,
-        debug=settings.server.debug,
+        version=settings.version,
+        debug=settings.debug,
         lifespan=lifespan,
     )
 

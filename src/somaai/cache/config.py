@@ -11,11 +11,11 @@ class CacheConfig:
     # Redis configuration
     redis_url: str = field(
         default_factory=lambda: os.getenv(
-            "SOMAAI_REDIS__URL", "redis://localhost:6379/0"
+            "SOMAAI_REDIS_URL", "redis://localhost:6379/0"
         )
     )
     redis_password: str | None = field(
-        default_factory=lambda: os.getenv("SOMAAI_REDIS__PASSWORD")
+        default_factory=lambda: os.getenv("SOMAAI_REDIS_PASSWORD")
     )
 
     # TTL defaults (in seconds)
@@ -40,43 +40,43 @@ class CacheConfig:
             from somaai.settings import settings as main_settings
 
             return cls(
-                redis_url=main_settings.redis.cache_url,
+                redis_url=main_settings.redis_cache_url,
                 redis_password=(
-                    main_settings.redis.password.get_secret_value()
-                    if main_settings.redis.password
+                    main_settings.redis_password.get_secret_value()
+                    if main_settings.redis_password
                     else None
                 ),
-                query_ttl=main_settings.cache.query_ttl,
-                embedding_ttl=main_settings.cache.embedding_ttl,
-                retrieval_ttl=main_settings.cache.retrieval_ttl,
-                session_ttl=main_settings.cache.session_ttl,
-                semantic_enabled=main_settings.cache.semantic_enabled,
-                similarity_threshold=main_settings.cache.similarity_threshold,
-                embedding_dimension=main_settings.cache.embedding_dimension,
-                namespace=main_settings.cache.namespace,
+                query_ttl=main_settings.cache_query_ttl,
+                embedding_ttl=main_settings.cache_embedding_ttl,
+                retrieval_ttl=main_settings.cache_retrieval_ttl,
+                session_ttl=main_settings.cache_session_ttl,
+                semantic_enabled=main_settings.cache_semantic_enabled,
+                similarity_threshold=main_settings.cache_similarity_threshold,
+                embedding_dimension=main_settings.cache_embedding_dimension,
+                namespace=main_settings.cache_namespace,
             )
         except (ImportError, AttributeError):
             # Fallback to environment variables
             return cls(
                 redis_url=os.getenv(
-                    "SOMAAI_REDIS__CACHE_URL", "redis://localhost:6379/2"
+                    "SOMAAI_REDIS_CACHE_URL", "redis://localhost:6379/2"
                 ),
-                redis_password=os.getenv("SOMAAI_REDIS__PASSWORD"),
-                query_ttl=int(os.getenv("SOMAAI_CACHE__QUERY_TTL", "86400")),
-                embedding_ttl=int(os.getenv("SOMAAI_CACHE__EMBEDDING_TTL", "3600")),
-                retrieval_ttl=int(os.getenv("SOMAAI_CACHE__RETRIEVAL_TTL", "3600")),
-                session_ttl=int(os.getenv("SOMAAI_CACHE__SESSION_TTL", "3600")),
+                redis_password=os.getenv("SOMAAI_REDIS_PASSWORD"),
+                query_ttl=int(os.getenv("SOMAAI_CACHE_QUERY_TTL", "86400")),
+                embedding_ttl=int(os.getenv("SOMAAI_CACHE_EMBEDDING_TTL", "3600")),
+                retrieval_ttl=int(os.getenv("SOMAAI_CACHE_RETRIEVAL_TTL", "3600")),
+                session_ttl=int(os.getenv("SOMAAI_CACHE_SESSION_TTL", "3600")),
                 semantic_enabled=(
-                    os.getenv("SOMAAI_CACHE__SEMANTIC_ENABLED", "true").lower()
+                    os.getenv("SOMAAI_CACHE_SEMANTIC_ENABLED", "true").lower()
                     == "true"
                 ),
                 similarity_threshold=float(
-                    os.getenv("SOMAAI_CACHE__SIMILARITY_THRESHOLD", "0.92")
+                    os.getenv("SOMAAI_CACHE_SIMILARITY_THRESHOLD", "0.92")
                 ),
                 embedding_dimension=int(
-                    os.getenv("SOMAAI_CACHE__EMBEDDING_DIM", "768")
+                    os.getenv("SOMAAI_CACHE_EMBEDDING_DIM", "768")
                 ),
-                namespace=os.getenv("SOMAAI_CACHE__NAMESPACE", "somaai"),
+                namespace=os.getenv("SOMAAI_CACHE_NAMESPACE", "somaai"),
             )
 
 

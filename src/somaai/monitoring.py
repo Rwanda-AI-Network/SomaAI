@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 _PREFIX = "somaai"
 
 # Runtime flag — set to True by setup_metrics() when the app opts in.
-# This ensures no Prometheus writes happen if settings.server.enable_metrics is False.
+# This ensures no Prometheus writes happen if settings.enable_metrics is False.
 _metrics_enabled = False
 
 # ════════════════════════════════════════════════════════════════════
@@ -276,18 +276,18 @@ def setup_metrics(settings) -> None:
         # App info
         app_info.info(
             {
-                "version": settings.server.version,
+                "version": settings.version,
                 "app_name": settings.app_name,
             }
         )
 
         # Feature flags — only report flags that actually exist in Settings
         feature_flags.labels(feature="input_validation").set(
-            1 if settings.security.rag_enable_input_validation else 0
+            1 if settings.rag_enable_input_validation else 0
         )
-        feature_flags.labels(feature="debug").set(1 if settings.server.debug else 0)
+        feature_flags.labels(feature="debug").set(1 if settings.debug else 0)
         feature_flags.labels(feature="require_api_key").set(
-            1 if settings.security.require_api_key else 0
+            1 if settings.require_api_key else 0
         )
 
         _metrics_enabled = True

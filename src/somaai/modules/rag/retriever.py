@@ -73,7 +73,7 @@ class Retriever:
             List of documents with content, metadata, and scores
         """
         # Input validation
-        if self.settings.security.rag_enable_input_validation:
+        if self.settings.rag_enable_input_validation:
             if not query or not query.strip():
                 logger.warning("Empty query provided to retriever")
                 return []
