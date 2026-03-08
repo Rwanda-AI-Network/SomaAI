@@ -11,13 +11,19 @@ from typing import Any
 from somaai.contracts.jobs import JobStatus
 from somaai.jobs.queue import update_job_progress, update_job_status
 
+# Ensure worker processes use the same structured logging as the HTTP server.
+from somaai.logging_conf import setup_logging
+
+setup_logging()
+
 
 async def ingest_document_task(
     job_id: str,
     doc_id: str,
-    file_path: str,
+    storage_key: str,
     grade: str,
     subject: str,
+    content_hash: str | None = None,
     title: str | None = None,
 ) -> None:
     """Process document ingestion.
@@ -25,7 +31,7 @@ async def ingest_document_task(
     Executed as a background job after document upload.
 
     Steps:
-        1. Load document from storage
+        1. Load document from object storage (MinIO/S3)
         2. Extract text and metadata
         3. Split into chunks
         4. Generate embeddings for chunks
@@ -35,40 +41,49 @@ async def ingest_document_task(
     Args:
         job_id: Job ID for progress updates
         doc_id: Document ID to process
-        file_path: Path to the document file
+        storage_key: Object key in MinIO/S3
         grade: Grade level
         subject: Subject
+        content_hash: SHA-256 hash (pre-computed at upload)
         title: Optional document title
     """
     import asyncio
+    from pathlib import Path
 
     from somaai.db import crud
     from somaai.db.session import async_session_maker
     from somaai.modules.ingest.orchestrator import IngestionOrchestrator
+    from somaai.providers.storage import get_storage
     from somaai.settings import settings
 
     try:
         await update_job_status(job_id, JobStatus.RUNNING)
 
-        orchestrator = IngestionOrchestrator(settings)
+        # Fetch file as managed stream from object storage.
+        # The StorageStream context manager guarantees close/release_conn.
+        storage = get_storage()
+        async with storage.open(storage_key) as file_stream:
+            orchestrator = IngestionOrchestrator(settings)
 
-        # Sync-compatible progress callback that schedules async DB updates
-        def on_progress(stage: str, pct: int) -> None:
-            """Sync progress callback - schedules async update."""
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(update_job_progress(job_id, pct, stage))
-            except RuntimeError:
-                pass  # No running loop, skip progress update
+            # Sync-compatible progress callback that schedules async DB updates
+            def on_progress(stage: str, pct: int) -> None:
+                """Sync progress callback - schedules async update."""
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(update_job_progress(job_id, pct, stage))
+                except RuntimeError:
+                    pass  # No running loop, skip progress update
 
-        result = await orchestrator.run(
-            doc_id=doc_id,
-            file_path=file_path,
-            grade=grade,
-            subject=subject,
-            title=title,
-            on_progress=on_progress,
-        )
+            result = await orchestrator.run(
+                doc_id=doc_id,
+                file_path=Path(storage_key),  # used for extension detection
+                file_stream=file_stream,
+                storage_key=storage_key,
+                grade=grade,
+                subject=subject,
+                title=title,
+                on_progress=on_progress,
+            )
 
         # Update document with processing results
         page_count = result.get("pages", 0) if isinstance(result, dict) else 0

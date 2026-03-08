@@ -59,10 +59,30 @@ def get_qdrant_client(settings: Settings) -> QdrantClient:
         logger.info(f"Creating Qdrant client: {settings.qdrant_url}")
         _QDRANT_CLIENT = QdrantClient(
             url=settings.qdrant_url,
-            api_key=settings.qdrant_api_key,
+            api_key=(
+                settings.qdrant_api_key.get_secret_value()
+                if settings.qdrant_api_key
+                else None
+            ),
             timeout=30,
         )
     return _QDRANT_CLIENT
+
+
+def close_qdrant_client() -> None:
+    """Close the singleton Qdrant client.
+
+    Call on application shutdown to release connections.
+    """
+    global _QDRANT_CLIENT
+    if _QDRANT_CLIENT is not None:
+        try:
+            _QDRANT_CLIENT.close()
+            logger.info("Qdrant client closed")
+        except Exception as e:
+            logger.warning("Error closing Qdrant client: %s", e)
+        finally:
+            _QDRANT_CLIENT = None
 
 
 class QdrantStore(VectorStore):
@@ -229,7 +249,8 @@ class QdrantStore(VectorStore):
     async def _batch_check_hashes(self, hashes: list[str]) -> set[str]:
         """Batch check which hashes already exist.
 
-        Single query instead of O(n) queries.
+        Paginates in batches of 100 to avoid Qdrant MatchAny limits
+        while still checking ALL hashes (no silent truncation).
 
         Args:
             hashes: List of content hashes
@@ -240,28 +261,35 @@ class QdrantStore(VectorStore):
         if not hashes:
             return set()
 
+        batch_size = 100
+        existing: set[str] = set()
+
         try:
             from qdrant_client.models import FieldCondition, Filter, MatchAny
 
-            results = self.client.scroll(
-                collection_name=self.settings.qdrant_collection_name,
-                scroll_filter=Filter(
-                    should=[
-                        FieldCondition(
-                            key=self._meta_key("content_hash"),
-                            match=MatchAny(any=hashes[:100]),
-                        )
-                    ]
-                ),
-                limit=len(hashes),
-                with_payload=[self._meta_key("content_hash")],
-            )
+            for i in range(0, len(hashes), batch_size):
+                batch = hashes[i : i + batch_size]
 
-            existing = {
-                p.payload.get("metadata", {}).get("content_hash")
-                for p in results[0]
-                if p.payload and p.payload.get("metadata", {}).get("content_hash")
-            }
+                results = self.client.scroll(
+                    collection_name=self.settings.qdrant_collection_name,
+                    scroll_filter=Filter(
+                        should=[
+                            FieldCondition(
+                                key=self._meta_key("content_hash"),
+                                match=MatchAny(any=batch),
+                            )
+                        ]
+                    ),
+                    limit=len(batch),
+                    with_payload=[self._meta_key("content_hash")],
+                )
+
+                existing.update(
+                    p.payload.get("metadata", {}).get("content_hash")
+                    for p in results[0]
+                    if p.payload and p.payload.get("metadata", {}).get("content_hash")
+                )
+
             logger.debug(f"Found {len(existing)} existing hashes out of {len(hashes)}")
             return existing
 

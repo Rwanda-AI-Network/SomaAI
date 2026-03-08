@@ -16,8 +16,19 @@ from somaai.settings import settings
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan."""
+    import logging
+
+    startup_logger = logging.getLogger("somaai.startup")
+
     # Initialize database tables (for development)
     await init_db()
+
+    # Security audit: warn if API key auth is disabled in non-debug mode
+    if not settings.require_api_key and not settings.debug:
+        startup_logger.warning(
+            "⚠️  API key authentication is DISABLED in non-debug mode. "
+            "Set REQUIRE_API_KEY=true for production deployments."
+        )
 
     # Pre-load embeddings model to avoid first-request latency
     # Skip during tests — model download hangs test setup
@@ -25,30 +36,40 @@ async def lifespan(app: FastAPI):
 
     if not os.getenv("TESTING"):
         get_embeddings_model(settings)
-        app.state.llm = get_llm(settings)
+        # Use fallback_to_mock in debug mode to avoid startup crashes
+        app.state.llm = get_llm(settings, fallback_to_mock=settings.debug)
     else:
         # In tests, use MockLLMProvider to avoid external calls
         from somaai.providers.llm import MockLLMProvider
 
         app.state.llm = MockLLMProvider()
 
-    # Update feature flag metrics
-    try:
-        from somaai.monitoring import update_feature_flags
+    # Initialize Prometheus metrics (gated by enable_metrics setting)
+    if settings.enable_metrics:
+        from somaai.monitoring import setup_metrics
 
-        update_feature_flags(settings)
-    except ImportError:
-        pass  # Monitoring not available
+        setup_metrics(settings)
 
     try:
         yield
     finally:
         await close_db()
+        # Close Qdrant connection pool
+        try:
+            from somaai.modules.knowledge.stores.qdrant import close_qdrant_client
+
+            close_qdrant_client()
+        except Exception:
+            pass
         app.state.llm = None
 
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
+    from somaai.logging_conf import setup_logging
+
+    setup_logging()
+
     app = FastAPI(
         title=settings.app_name,
         version=settings.version,
@@ -60,12 +81,13 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(api_router, prefix="/api")
 
-    # Add Prometheus metrics instrumentation
-    try:
-        from prometheus_fastapi_instrumentator import Instrumentator
+    # Add Prometheus metrics instrumentation (only when enabled)
+    if settings.enable_metrics:
+        try:
+            from prometheus_fastapi_instrumentator import Instrumentator
 
-        Instrumentator().instrument(app).expose(app, endpoint="/metrics")
-    except ImportError:
-        pass  # Optional dependency
+            Instrumentator().instrument(app).expose(app, endpoint="/metrics")
+        except ImportError:
+            pass  # Optional dependency
 
     return app
