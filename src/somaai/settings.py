@@ -1,6 +1,6 @@
-from enum import Enum
 import logging
-from typing import Annotated, Literal
+from enum import Enum
+from typing import Literal
 
 from pydantic import (
     Field,
@@ -22,23 +22,23 @@ class IngestSettings(BaseSettings):
     max_file_size: int = 10 * 1024 * 1024  # 10MB
     validation_threshold: int = 1 * 1024 * 1024  # 1MB
     max_chunk_size: int = 1500
-    
+
     # Streaming optimization settings
     use_optimized_streaming: bool = True  # Feature flag
     use_pikepdf: bool = True  # Use fast C++ PDF parser
-    
+
     # Temporary file management
     temp_dir: str | None = None  # Custom temp directory (None = system default)
     temp_prefix: str = "somaai_"  # Prefix for temp files
     temp_cleanup_on_error: bool = True  # Auto-cleanup on errors
     temp_max_age_hours: int = 24  # Max age before cleanup
-    
+
     # Streaming buffer settings
     stream_buffer_small_threshold: int = 10 * 1024 * 1024  # 10MB
     stream_buffer_spool_threshold: int = 10 * 1024 * 1024  # 10MB RAM before spill
     stream_chunk_size: int = 64 * 1024  # 64KB chunks
     stream_force_disk_threshold: int = 100 * 1024 * 1024  # 100MB
-    
+
     # Parallel processing
     max_parallel_pages: int = 4  # Max parallel page extraction
     enable_parallel_extraction: bool = True
@@ -93,7 +93,7 @@ class QdrantSettings(BaseSettings):
 class StorageSettings(BaseSettings):
     """Object storage configurations (MinIO/S3)."""
     backend: Literal["minio", "s3"] = "minio"
-    
+
     # MinIO
     minio_endpoint: str = "localhost:9000"
     minio_access_key: str = "minioadmin"
@@ -124,7 +124,7 @@ class SecuritySettings(BaseSettings):
     """Security and Session configurations."""
     require_api_key: bool = False
     rate_limit_ask: str = "20/hour"
-    rate_limit_create_conversation: str = "10/hour"
+    rate_limit_create_conversation: str = "50/hour"
     session_cookie_secure: bool = False
     session_ttl_days: int = 90
     rag_enable_input_validation: bool = True
@@ -132,7 +132,7 @@ class SecuritySettings(BaseSettings):
 
 class Settings(BaseSettings):
     """Main Application Settings."""
-    
+
     model_config = SettingsConfigDict(
         env_file_encoding="utf-8",
         extra="ignore",
@@ -143,7 +143,7 @@ class Settings(BaseSettings):
 
     env: AppEnv = AppEnv.DEVELOPMENT
     app_name: str = "SomaAI"
-    
+
     # Sub-models
     server: ServerSettings = ServerSettings()
     db: DatabaseSettings = DatabaseSettings()
@@ -167,12 +167,12 @@ class Settings(BaseSettings):
             if not self.security.session_cookie_secure:
                 # We could warn or enforce here. Let's enforce for principal status.
                 self.security.session_cookie_secure = True
-                
+
         if self.server.debug:
             logger = logging.getLogger("somaai.settings")
             db_host = self.db.url.split("@")[-1] if "@" in self.db.url else "sqlite"
             logger.info(
-                "Config Loaded [%s] - DB: %s, Debug: %s", 
+                "Config Loaded [%s] - DB: %s, Debug: %s",
                 self.env.value, db_host, self.server.debug
             )
         return self

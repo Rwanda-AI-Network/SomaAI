@@ -8,7 +8,7 @@ import asyncio
 import logging
 from pathlib import Path
 from types import TracebackType
-from typing import Any, BinaryIO, Self
+from typing import BinaryIO, Self
 from urllib.parse import urlparse
 
 from .adapters import AdapterFactory
@@ -19,10 +19,10 @@ logger = logging.getLogger(__name__)
 
 class ManagedStream:
     """Managed stream with automatic cleanup (Context Manager + RAII).
-    
+
     Wraps a stream and ensures cleanup even on exceptions.
     Implements async context manager protocol.
-    
+
     Example:
         >>> async with ManagedStream(stream, temp_path) as managed:
         ...     process(managed.stream)
@@ -38,7 +38,7 @@ class ManagedStream:
         doc_id: str | None = None,
     ):
         """Initialize managed stream.
-        
+
         Args:
             stream: Stream to manage
             temp_path: Temp file path (for cleanup)
@@ -120,21 +120,21 @@ class ManagedStream:
 
 class StreamFactory:
     """Factory for creating managed streams from any source.
-    
+
     Provides a unified interface for creating streams with automatic:
     - Source detection (S3, local, bytes, HTTP)
     - Adapter selection (memory, disk, spool)
     - Resource management (cleanup)
-    
+
     Example:
         >>> # From S3
         >>> async with StreamFactory.create("s3://bucket/key.pdf") as stream:
         ...     process(stream.stream)
-        >>> 
+        >>>
         >>> # From local file
         >>> async with StreamFactory.create("/path/to/file.pdf") as stream:
         ...     process(stream.stream)
-        >>> 
+        >>>
         >>> # From bytes
         >>> async with StreamFactory.create(pdf_bytes) as stream:
         ...     process(stream.stream)
@@ -150,17 +150,17 @@ class StreamFactory:
         **kwargs,
     ) -> ManagedStream:
         """Create managed stream from any source.
-        
+
         Args:
             source: Source (URI, bytes, or Path)
             doc_id: Document identifier
             ensure_seekable: Convert to seekable if needed
             adapter_strategy: Force adapter strategy ('memory', 'disk', 'spool')
             **kwargs: Source-specific options
-        
+
         Returns:
             ManagedStream instance
-        
+
         Example:
             >>> # S3 with custom endpoint
             >>> stream = await StreamFactory.create(
@@ -235,7 +235,8 @@ class StreamFactory:
             stream = await adapter.adapt(stream, size_hint=metadata.get("size"))
 
             logger.info(
-                f"[{doc_id}] Stream adapted using {adapter.get_strategy_name()} strategy"
+                "[%s] Stream adapted using %s strategy",
+                doc_id, adapter.get_strategy_name()
             )
 
         # Create managed stream
@@ -250,24 +251,27 @@ class StreamFactory:
         **kwargs,
     ) -> ManagedStream:
         """Create stream from storage backend (convenience method).
-        
+
         Args:
             storage_key: Object key
             backend: Storage backend ('s3' or 'minio')
             doc_id: Document identifier
             **kwargs: Backend-specific options (bucket, endpoint, credentials)
-        
+
         Returns:
             ManagedStream instance
-        
+
         Example:
             >>> from somaai.settings import settings
-            >>> 
+            >>>
             >>> stream = await StreamFactory.create_from_storage(
             ...     storage_key="docs/file.pdf",
             ...     backend=settings.storage.backend,
             ...     bucket=settings.storage.s3_bucket,
-            ...     endpoint=settings.storage.minio_endpoint if backend == 'minio' else None,
+            ...     endpoint=(
+            ...         settings.storage.minio_endpoint 
+            ...         if backend == 'minio' else None
+            ...     ),
             ...     access_key=settings.storage.s3_access_key,
             ...     secret_key=settings.storage.s3_secret_key.get_secret_value()
             ... )
@@ -283,10 +287,10 @@ class StreamFactory:
     @staticmethod
     def _is_seekable(stream: BinaryIO) -> bool:
         """Check if stream is seekable.
-        
+
         Args:
             stream: Stream to check
-        
+
         Returns:
             True if seekable
         """
@@ -304,12 +308,12 @@ class StreamFactory:
     @classmethod
     def configure(cls, **settings) -> None:
         """Configure factory settings.
-        
+
         Args:
             **settings: Configuration options
                 - small_threshold: Small file threshold (bytes)
                 - large_threshold: Large file threshold (bytes)
-        
+
         Example:
             >>> StreamFactory.configure(
             ...     small_threshold=5 * 1024 * 1024,  # 5MB
