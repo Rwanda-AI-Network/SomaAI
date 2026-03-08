@@ -274,78 +274,74 @@ class ExtractionStage(PipelineStage):
         """Extract and sanitize document with production-grade streaming.
 
         Flow:
-        1. Create managed stream using factory (auto-detects source)
-        2. Ensure seekable (smart adapter selection)
+        1. Get file stream (from MinIO storage or local source)
+        2. Write to temp file for extractor compatibility
         3. Extract with text_extractor
         4. Sanitize result
         5. Validate quality
         6. Store in context
-        7. Automatic cleanup via context manager
+        7. Automatic cleanup
         """
         self._report_progress(ctx, "Extracting document", 0.1)
 
+        import tempfile
+
+        temp_path = None
+
         try:
-            from somaai.utils.text_extractor.streaming import StreamFactory
-
-            # STEP 1: Create managed stream from any source
-            # Factory auto-detects: S3, local file, bytes, HTTP
+            # STEP 1: Get file data and write to temp file
             if ctx.storage_key:
-                # S3/MinIO file - use factory with storage backend
-                from somaai.settings import settings
+                # MinIO — use existing storage provider
+                from somaai.providers.storage import get_storage
 
-                managed_stream = await StreamFactory.create_from_storage(
-                    storage_key=ctx.storage_key,
-                    backend=settings.storage_backend,
-                    bucket=settings.minio_bucket,
-                    endpoint=(
-                        f"{'https' if settings.minio_secure else 'http'}://{settings.minio_endpoint}"
-                    ),
-                    access_key=settings.minio_access_key,
-                    secret_key=(
-                        settings.minio_secret_key.get_secret_value()
-                    ),
-                    doc_id=ctx.doc_id,
-                    ensure_seekable=True,  # Auto-adapt if needed
+                storage = get_storage()
+                async with storage.open(ctx.storage_key) as stream:
+                    file_data = stream.read()
+
+                # Write to temp file for extractor compatibility
+                suffix = Path(ctx.storage_key).suffix or ".pdf"
+                with tempfile.NamedTemporaryFile(
+                    delete=False, suffix=suffix
+                ) as tmp:
+                    tmp.write(file_data)
+                    temp_path = Path(tmp.name)
+
+                logger.info(
+                    f"[{ctx.doc_id}] Read {len(file_data)} bytes from "
+                    f"MinIO key: {ctx.storage_key}"
                 )
 
             elif ctx.file_content:
-                # Bytes in memory
-                managed_stream = await StreamFactory.create(
-                    source=ctx.file_content,
-                    doc_id=ctx.doc_id,
-                    ensure_seekable=True,
-                )
+                # Bytes in memory — write to temp file
+                suffix = Path(str(ctx.file_path)).suffix or ".pdf"
+                with tempfile.NamedTemporaryFile(
+                    delete=False, suffix=suffix
+                ) as tmp:
+                    tmp.write(ctx.file_content)
+                    temp_path = Path(tmp.name)
 
             elif ctx.file_stream:
-                # Existing stream - wrap it (less common path)
-                # For now, read into bytes and use factory
-                logger.debug("Converting existing stream to managed stream")
+                # Existing stream — read and write to temp file
                 data = await asyncio.to_thread(ctx.file_stream.read)
-                managed_stream = await StreamFactory.create(
-                    source=data,
-                    doc_id=ctx.doc_id,
-                    ensure_seekable=True,
-                )
+                suffix = Path(str(ctx.file_path)).suffix or ".pdf"
+                with tempfile.NamedTemporaryFile(
+                    delete=False, suffix=suffix
+                ) as tmp:
+                    tmp.write(data)
+                    temp_path = Path(tmp.name)
 
             else:
-                # Local file
-                managed_stream = await StreamFactory.create(
-                    source=ctx.file_path,
-                    doc_id=ctx.doc_id,
-                    ensure_seekable=True,
-                )
+                # Local file — use directly
+                temp_path = ctx.file_path
 
-            # STEP 2: Use context manager for guaranteed cleanup
-            async with managed_stream as stream:
-                # STEP 3: Extract using text_extractor
-                raw_result = await asyncio.to_thread(
-                    self.extractor,
-                    input_data=stream.stream,  # Pass the managed stream
-                    ocr_mode=ctx.ocr_mode,
-                    language=ctx.language,
-                )
-
-            # Stream automatically cleaned up here (even on exceptions)
+            # STEP 2: Extract using text_extractor
+            self._report_progress(ctx, "Running text extraction", 0.3)
+            raw_result = await asyncio.to_thread(
+                self.extractor,
+                input_data=temp_path,
+                ocr_mode=ctx.ocr_mode,
+                language=ctx.language,
+            )
 
             self._report_progress(ctx, "Sanitizing extracted content", 0.5)
 
@@ -407,6 +403,17 @@ class ExtractionStage(PipelineStage):
             raise ExtractionValidationError(
                 [{"severity": "critical", "message": f"Extraction failed: {e}"}]
             )
+
+        finally:
+            # Clean up temp file (but not original local files)
+            if temp_path and temp_path != ctx.file_path and temp_path.exists():
+                try:
+                    temp_path.unlink()
+                    logger.debug(f"[{ctx.doc_id}] Cleaned up temp file: {temp_path}")
+                except Exception as e:
+                    logger.warning(
+                        f"[{ctx.doc_id}] Failed to clean up temp file: {e}"
+                    )
 
     def _log_extraction_summary(self, ctx: PipelineContext) -> None:
         """Log extraction results for monitoring."""

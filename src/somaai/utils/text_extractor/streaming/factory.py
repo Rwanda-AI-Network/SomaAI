@@ -9,10 +9,9 @@ import logging
 from pathlib import Path
 from types import TracebackType
 from typing import BinaryIO, Self
-from urllib.parse import urlparse
 
 from .adapters import AdapterFactory
-from .sources import BytesSource, HTTPSource, LocalFileSource, S3Source
+from .sources import BytesSource, HTTPSource, LocalFileSource
 
 logger = logging.getLogger(__name__)
 
@@ -182,22 +181,7 @@ class StreamFactory:
         elif isinstance(source, (str, Path)):
             source_str = str(source)
 
-            if source_str.startswith("s3://"):
-                # S3 source
-                parsed = urlparse(source_str)
-                bucket = parsed.netloc
-                key = parsed.path.lstrip("/")
-
-                source_obj = S3Source(
-                    bucket=bucket,
-                    key=key,
-                    endpoint=kwargs.get("endpoint"),
-                    access_key=kwargs.get("access_key"),
-                    secret_key=kwargs.get("secret_key"),
-                    doc_id=doc_id,
-                )
-
-            elif source_str.startswith(("http://", "https://")):
+            if source_str.startswith(("http://", "https://")):
                 # HTTP source
                 source_obj = HTTPSource(source_str, doc_id=doc_id)
 
@@ -247,47 +231,7 @@ class StreamFactory:
         # Create managed stream
         return ManagedStream(stream=stream, doc_id=doc_id)
 
-    @classmethod
-    async def create_from_storage(
-        cls,
-        storage_key: str,
-        backend: str = "s3",
-        doc_id: str | None = None,
-        **kwargs,
-    ) -> ManagedStream:
-        """Create stream from storage backend (convenience method).
 
-        Args:
-            storage_key: Object key
-            backend: Storage backend ('s3' or 'minio')
-            doc_id: Document identifier
-            **kwargs: Backend-specific options (bucket, endpoint, credentials)
-
-        Returns:
-            ManagedStream instance
-
-        Example:
-            >>> from somaai.settings import settings
-            >>>
-            >>> stream = await StreamFactory.create_from_storage(
-            ...     storage_key="docs/file.pdf",
-            ...     backend=settings.storage.backend,
-            ...     bucket=settings.storage.s3_bucket,
-            ...     endpoint=(
-            ...         settings.storage.minio_endpoint
-            ...         if backend == 'minio' else None
-            ...     ),
-            ...     access_key=settings.storage.s3_access_key,
-            ...     secret_key=settings.storage.s3_secret_key.get_secret_value()
-            ... )
-        """
-        bucket = kwargs.pop("bucket", None)
-        if not bucket:
-            raise ValueError("bucket is required")
-
-        uri = f"s3://{bucket}/{storage_key}"
-
-        return await cls.create(source=uri, doc_id=doc_id, **kwargs)
 
     @staticmethod
     def _is_seekable(stream: BinaryIO) -> bool:

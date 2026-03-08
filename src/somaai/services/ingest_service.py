@@ -36,10 +36,16 @@ class IngestionService:
         Architecture Decision: Centralizes DB entry and worker handoff to ensure
         consistency between standard, storage-based, and chunked uploads.
         """
+        from somaai.utils.validators import validate_grade, validate_subject
+
+        # 1. Validate grade/subject exist in curriculum_metadata upon the upload
+        grade = await validate_grade(db, grade)
+        subject = await validate_subject(db, subject)
+
         storage = get_storage()
         storage_backend = storage.backend_type
 
-        # 1. Create document record
+        # 2. Create document record
         await crud.create_document(
             db=db,
             doc_id=doc_id,
@@ -53,7 +59,7 @@ class IngestionService:
             content_hash=content_hash,
         )
 
-        # 2. Enqueue background job
+        # 3. Enqueue background job
         job_id = await enqueue_job(
             task_name="ingest_document",
             payload={

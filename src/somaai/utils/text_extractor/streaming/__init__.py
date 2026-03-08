@@ -1,6 +1,6 @@
 """Streaming infrastructure for text extraction.
 
-This module provides a pluggable, scalable streaming system that works
+This module provides a pluggable streaming system that works
 seamlessly with any text extraction strategy.
 
 Architecture:
@@ -8,20 +8,18 @@ Architecture:
     - Strategy pattern for different storage backends
     - Factory pattern for stream creation
     - Context managers for resource safety
-    - Generators for memory efficiency
 
 Example:
     >>> from somaai.utils.text_extractor.streaming import StreamFactory
     >>>
     >>> # Create stream from any source
-    >>> async with StreamFactory.create("s3://bucket/file.pdf") as stream:
-    ...     # Use with any extractor
+    >>> async with StreamFactory.create("/path/to/file.pdf") as stream:
     ...     result = await extractor.extract(stream)
 """
 
 from .factory import StreamFactory
 from .protocols import StreamProtocol, StreamSourceProtocol
-from .sources import BytesSource, LocalFileSource, S3Source
+from .sources import BytesSource, LocalFileSource
 
 __all__ = [
     "StreamFactory",
@@ -29,7 +27,6 @@ __all__ = [
     "StreamSourceProtocol",
     "BytesSource",
     "LocalFileSource",
-    "S3Source",
 ]
 
 __version__ = "1.0.0"
