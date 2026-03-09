@@ -85,7 +85,7 @@ class Settings(BaseSettings):
     # LLM
     llm_backend: str = "groq"
     groq_api_key: SecretStr | None = None
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "llama-3.3-70b-versatile" # openai/gpt-oss-120b
 
     # Ingestion
     max_file_size: int = 100 * 1024 * 1024  # 100 MB

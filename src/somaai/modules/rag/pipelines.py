@@ -103,14 +103,17 @@ class RAGPipeline:
         debug.start(query, grade, subject)
 
         try:
-            # 0. Check response cache
+            # 0. Check response cache (only for zero-context questions)
             from somaai.cache.rag import get_response_cache
 
             cache = get_response_cache()
-            cached_response = await cache.get(query, grade, subject)
-            if cached_response:
-                debug.log_stage("cache", hit=True)
-                return cached_response
+            
+            # Bypass cache if there is conversation history to prevent reused answers
+            if not history or not history.strip():
+                cached_response = await cache.get(query, grade, subject)
+                if cached_response:
+                    debug.log_stage("cache", hit=True)
+                    return cached_response
 
             # 1. Sanitize input
             clean_query = sanitize_query(query)
@@ -138,7 +141,7 @@ class RAGPipeline:
             # 2. Query condensation (only if history exists)
             search_query = clean_query
             if history and history.strip():
-                search_query = await self._condense_query(clean_query, history)
+                search_query = await self._condense_query(clean_query, history, grade, subject)
                 debug.log_stage(
                     "condense",
                     original=clean_query,
@@ -172,6 +175,7 @@ class RAGPipeline:
                 query=search_query,
                 context=context_str,
                 grade=grade,
+                subject=subject,
                 user_role=user_role,
                 include_analogy=include_analogy,
                 include_realworld=include_realworld,
@@ -246,7 +250,7 @@ class RAGPipeline:
             )
             raise
 
-    async def _condense_query(self, query: str, history: str) -> str:
+    async def _condense_query(self, query: str, history: str, grade: str, subject: str) -> str:
         """Rewrite query to be standalone using history.
 
         Args:
@@ -265,7 +269,10 @@ class RAGPipeline:
             llm = get_llm(self.settings)
 
             prompt = CONDENSE_QUESTION_PROMPT.format(
-                chat_history=history, question=query
+                chat_history=history,
+                question=query,
+                grade=grade,
+                subject=subject,
             )
 
             response_json = await llm.generate(prompt)
