@@ -88,7 +88,7 @@ class Settings(BaseSettings):
     groq_model: str = "llama-3.3-70b-versatile"
 
     # Ingestion
-    max_file_size: int = 50 * 1024 * 1024  # 50 MB
+    max_file_size: int = 100 * 1024 * 1024  # 100 MB
     ingest_validation_threshold: int = 1 * 1024 * 1024  # 1 MB
     max_chunk_size: int = 1500
 

@@ -244,16 +244,36 @@ class CitationExtractor:
             citations: CitationResponse objects from extract_citations
             chunks_map: Mapping from extract_citations (chunk_id -> chunk_id)
         """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         # chunks_map preserves insertion order (Python 3.7+) and was built
         # in the same pass as citations, so index i in citations maps to
         # index i in chunks_map.values(). This is O(1) per citation.
         chunk_ids = list(chunks_map.values())
 
+        if not chunk_ids:
+            return
+
+        # Batch-verify which chunk_ids actually exist in PostgreSQL.
+        # This prevents FK violations when Qdrant has stale data.
+        result = await db.execute(
+            select(Chunk.id).where(Chunk.id.in_(chunk_ids))
+        )
+        valid_chunk_ids = {row[0] for row in result}
+
+        skipped = 0
+        saved = 0
+
         for i, cit in enumerate(citations):
             chunk_id = chunk_ids[i] if i < len(chunk_ids) else None
 
             if not chunk_id:
-                # Skip citations we can't link to a chunk
+                continue
+
+            if chunk_id not in valid_chunk_ids:
+                skipped += 1
                 continue
 
             db_citation = MessageCitation(
@@ -265,6 +285,15 @@ class CitationExtractor:
                 snippet=cit.chunk_preview,
             )
             db.add(db_citation)
+            saved += 1
+
+        if skipped:
+            logger.warning(
+                "Skipped %d citation(s): chunk_ids not found in PostgreSQL "
+                "(Qdrant/PostgreSQL may be out of sync)",
+                skipped,
+                extra={"message_id": message_id, "saved": saved, "skipped": skipped},
+            )
 
     def _format_view_url(self, doc_id: str, page_number: int) -> str:
         """Generate stable view URL for a citation."""
