@@ -103,17 +103,30 @@ class RAGPipeline:
         debug.start(query, grade, subject)
 
         try:
-            # 0. Check response cache (only for zero-context questions)
+            # 0. Check response cache
             from somaai.cache.rag import get_response_cache
+            from somaai.modules.rag.generator import _is_follow_up, _is_repeat_question
 
             cache = get_response_cache()
-            
-            # Bypass cache if there is conversation history to prevent reused answers
-            if not history or not history.strip():
+
+            # Bypass cache if there is conversation history (to prevent
+            # reused answers) or if this is a repeat/follow-up question
+            has_history = bool(history and history.strip())
+            is_follow = _is_follow_up(query, has_history)
+            is_repeat = _is_repeat_question(query, history) if has_history else False
+            skip_cache = has_history or is_follow or is_repeat
+
+            if not skip_cache:
                 cached_response = await cache.get(query, grade, subject)
                 if cached_response:
                     debug.log_stage("cache", hit=True)
                     return cached_response
+
+            if is_follow or is_repeat:
+                logger.info(
+                    "Detected %s — cache bypassed for fresh answer",
+                    "follow-up" if is_follow else "repeat question",
+                )
 
             # 1. Sanitize input
             clean_query = sanitize_query(query)
