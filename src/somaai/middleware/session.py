@@ -97,9 +97,12 @@ class SessionMiddleware(BaseHTTPMiddleware):
             request.state.is_authenticated = session_data.get("is_authenticated", False)
             request.state.user_id = session_data.get("user_id")
         else:
-            # New session needed
+            # No valid cookie session — check for X-Actor-Id header
+            # as a fallback for cross-origin clients that can't send cookies.
+            header_actor_id = request.headers.get("X-Actor-Id")
+
             token = _generate_session_token()
-            actor_id = _generate_actor_id()
+            actor_id = header_actor_id if header_actor_id else _generate_actor_id()
 
             session_data = {
                 "actor_id": actor_id,
@@ -115,8 +118,9 @@ class SessionMiddleware(BaseHTTPMiddleware):
             need_new_cookie = True
 
             logger.debug(
-                "Created new session for actor %s",
+                "Created new session for actor %s (source=%s)",
                 actor_id,
+                "header" if header_actor_id else "generated",
                 extra={"actor_id": actor_id},
             )
 
