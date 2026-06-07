@@ -76,52 +76,6 @@ class VectorStorageStage(PipelineStage):
 
             logger.info(f"Stored {len(ctx.stored_chunk_ids)} chunks successfully")
 
-            # Also add to BM25 index if hybrid search enabled
-            if getattr(ctx.settings, "rag_enable_hybrid_search", False):
-                try:
-                    from somaai.modules.knowledge.bm25_index import get_bm25_index
-
-                    bm25_index = get_bm25_index(ctx.settings)
-
-                    # Extract texts and IDs for BM25
-                    texts = [c.page_content for c in ctx.chunks]
-                    doc_ids = [c.metadata.get("chunk_id", "") for c in ctx.chunks]
-
-                    # CRITICAL FIX (Bug #2): Validate chunk IDs before indexing
-                    # This prevents silent data loss when chunk_id is missing
-                    valid_pairs = [(t, d) for t, d in zip(texts, doc_ids) if d]
-
-                    if not valid_pairs:
-                        logger.error(
-                            f"BM25 indexing failed: No valid chunk_ids found! "
-                            f"All {len(ctx.chunks)} chunks missing chunk_id metadata. "
-                            f"This indicates a bug in the enrichment stage."
-                        )
-                    elif len(valid_pairs) < len(texts):
-                        missing_count = len(texts) - len(valid_pairs)
-                        logger.warning(
-                            f"BM25 indexing: {missing_count}/{len(texts)} "
-                            "chunks missing chunk_id, "
-                            f"only indexing {len(valid_pairs)} chunks. "
-                            "Missing chunk_ids may cause incomplete "
-                            "hybrid search results."
-                        )
-
-                    if valid_pairs:
-                        valid_texts, valid_ids = zip(*valid_pairs)
-                        bm25_index.add_documents(list(valid_texts), list(valid_ids))
-                        logger.info(f"Added {len(valid_texts)} documents to BM25 index")
-                    else:
-                        logger.warning(
-                            "No documents added to BM25 index due to missing chunk_ids"
-                        )
-
-                except ImportError:
-                    logger.info("BM25 not available (rank-bm25 not installed)")
-                except Exception as e:
-                    # Don't fail ingestion if BM25 fails
-                    logger.warning(f"Failed to update BM25 index: {e}")
-
             return StageResult(
                 success=True,
                 data={

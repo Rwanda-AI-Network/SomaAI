@@ -276,20 +276,18 @@ def setup_metrics(settings) -> None:
         # App info
         app_info.info(
             {
-                "version": getattr(settings, "version", "unknown"),
-                "app_name": getattr(settings, "app_name", "somaai"),
+                "version": settings.version,
+                "app_name": settings.app_name,
             }
         )
 
         # Feature flags — only report flags that actually exist in Settings
         feature_flags.labels(feature="input_validation").set(
-            1 if getattr(settings, "rag_enable_input_validation", True) else 0
+            1 if settings.rag_enable_input_validation else 0
         )
-        feature_flags.labels(feature="debug").set(
-            1 if getattr(settings, "debug", False) else 0
-        )
+        feature_flags.labels(feature="debug").set(1 if settings.debug else 0)
         feature_flags.labels(feature="require_api_key").set(
-            1 if getattr(settings, "require_api_key", False) else 0
+            1 if settings.require_api_key else 0
         )
 
         _metrics_enabled = True
@@ -334,8 +332,12 @@ def log_rag_request(
                 rag_empty_results_total.labels(grade=grade, subject=subject).inc()
 
     # ── Structured log ──
+    from somaai.utils.logging_ext import actor_id_ctx, conversation_id_ctx
+
     log_data: dict[str, Any] = {
         "event": "rag_request",
+        "actor_id": actor_id_ctx.get() or "-",
+        "conversation_id": conversation_id_ctx.get() or "-",
         "query_length": len(query),
         "grade": grade,
         "subject": subject,

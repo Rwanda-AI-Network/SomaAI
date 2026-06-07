@@ -1,0 +1,126 @@
+services:
+  # --- Application Stack ---
+  api:
+    image: rwandaainetwork/somaai:latest
+    restart: unless-stopped
+    ports:
+      - "${SOMAAI_PORT:-8000}:8000"
+    env_file:
+      - ../.env
+    environment:
+      - SOMAAI_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-somaai}:${POSTGRES_PASSWORD:-somaai}@db:5432/${POSTGRES_DB:-somaai}
+      - SOMAAI_REDIS_URL=redis://redis:6379/0
+      - SOMAAI_REDIS_JOBS_URL=redis://redis:6379/1
+      - SOMAAI_REDIS_CACHE_URL=redis://redis:6379/2
+      - SOMAAI_QDRANT_URL=http://qdrant:6333
+      - SOMAAI_MINIO_ENDPOINT=minio:9000
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - somaai-network
+
+  worker:
+    image: rwandaainetwork/somaai:latest
+    restart: unless-stopped
+    command: python -m somaai.jobs.worker
+    env_file:
+      - ../.env
+    environment:
+      - SOMAAI_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-somaai}:${POSTGRES_PASSWORD:-somaai}@db:5432/${POSTGRES_DB:-somaai}
+      - SOMAAI_REDIS_URL=redis://redis:6379/0
+      - SOMAAI_REDIS_JOBS_URL=redis://redis:6379/1
+      - SOMAAI_REDIS_CACHE_URL=redis://redis:6379/2
+      - SOMAAI_QDRANT_URL=http://qdrant:6333
+      - SOMAAI_MINIO_ENDPOINT=minio:9000
+    depends_on:
+      - api
+    networks:
+      - somaai-network
+
+  # --- Infrastructure ---
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-somaai}
+      POSTGRES_USER: ${POSTGRES_USER:-somaai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-somaai}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-somaai} -d ${POSTGRES_DB:-somaai}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - somaai-network
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - somaai-network
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 1 bash -c 'cat < /dev/null > /dev/tcp/localhost/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - somaai-network
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - somaai-network
+
+networks:
+  somaai-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:
+  minio_data:

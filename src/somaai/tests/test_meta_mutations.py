@@ -8,7 +8,7 @@ import asyncio
 
 from fastapi.testclient import TestClient
 
-from somaai.db.models import Grade, Subject, Topic
+from somaai.db.models import CurriculumMetadata, Topic
 from somaai.db.session import async_session_maker
 from somaai.modules.meta.service import invalidate_meta_cache
 
@@ -34,8 +34,7 @@ async def _cleanup_all():
 
     async with async_session_maker() as db:
         await db.execute(delete(Topic))
-        await db.execute(delete(Subject))
-        await db.execute(delete(Grade))
+        await db.execute(delete(CurriculumMetadata))
         await db.commit()
 
 
@@ -57,90 +56,91 @@ class TestMetaMutations:
         payload = {
             "id": "T1",
             "name": "Test Grade",
-            "level": "secondary",
+            "type": "grade",
+            "key": "T1",
             "display_order": 100,
         }
-        response = client.post("/api/v1/meta/grades", json=payload)
+        response = client.post("/api/v1/meta/metadata", json=payload)
         assert response.status_code == 201
         data = response.json()
         assert data["id"] == "T1"
         assert data["name"] == "Test Grade"
 
         # Verify it exists
-        get_resp = client.get("/api/v1/meta/grades")
-        assert any(g["id"] == "T1" for g in get_resp.json())
+        get_resp = client.get("/api/v1/meta/metadata")
+        assert any(g["key"] == "T1" for g in get_resp.json())
 
     def test_update_grade(self, client: TestClient):
         """PATCH /meta/grades/{id} — update a grade."""
         # Setup
         _run(_cleanup_all())
         client.post(
-            "/api/v1/meta/grades",
+            "/api/v1/meta/metadata",
             json={
                 "id": "T1",
                 "name": "Old Name",
-                "level": "primary",
+                "type": "grade",
+            "key": "T1",
                 "display_order": 1,
             },
         )
 
         # Update
-        response = client.patch("/api/v1/meta/grades/T1", json={"name": "New Name"})
+        response = client.patch("/api/v1/meta/metadata/T1", json={"name": "New Name"})
         assert response.status_code == 200
         assert response.json()["name"] == "New Name"
 
         # Verify cache invalidation
-        get_resp = client.get("/api/v1/meta/grades")
+        get_resp = client.get("/api/v1/meta/metadata")
         assert any(g["name"] == "New Name" for g in get_resp.json())
 
     def test_delete_grade(self, client: TestClient):
         """DELETE /meta/grades/{id} — delete a grade."""
         # Setup
         client.post(
-            "/api/v1/meta/grades",
+            "/api/v1/meta/metadata",
             json={"id": "T1", "name": "Test", "level": "primary", "display_order": 1},
         )
 
         # Delete
-        response = client.delete("/api/v1/meta/grades/T1")
+        response = client.delete("/api/v1/meta/metadata/T1")
         assert response.status_code == 204
 
         # Verify it's gone
-        get_resp = client.get("/api/v1/meta/grades")
-        assert not any(g["id"] == "T1" for g in get_resp.json())
+        get_resp = client.get("/api/v1/meta/metadata")
+        assert not any(g["key"] == "T1" for g in get_resp.json())
 
     # --- Subjects ---
 
     def test_create_subject(self, client: TestClient):
         """POST /meta/subjects — create a new subject."""
         payload = {
-            "id": "test_subj",
+            "type": "subject", "key": "test_subj",
             "name": "Test Subject",
-            "icon": "test-icon",
-            "display_order": 50,
+                        "display_order": 50,
         }
-        response = client.post("/api/v1/meta/subjects", json=payload)
+        response = client.post("/api/v1/meta/metadata", json=payload)
         assert response.status_code == 201
         assert response.json()["id"] == "test_subj"
 
     def test_update_subject(self, client: TestClient):
         """PATCH /meta/subjects/{id} — update a subject."""
         client.post(
-            "/api/v1/meta/subjects",
-            json={"id": "ts", "name": "Old", "display_order": 1},
+            "/api/v1/meta/metadata",
+            json={"type": "subject", "key": "ts", "name": "Old", "display_order": 1},
         )
-        response = client.patch("/api/v1/meta/subjects/ts", json={"name": "New"})
+        response = client.patch("/api/v1/meta/metadata/ts", json={"name": "New"})
         assert response.status_code == 200
         assert response.json()["name"] == "New"
 
     def test_delete_subject(self, client: TestClient):
         """DELETE /meta/subjects/{id} — delete a subject."""
         client.post(
-            "/api/v1/meta/subjects",
-            json={"id": "ts", "name": "Old", "display_order": 1},
+            "/api/v1/meta/metadata",
+            json={"type": "subject", "key": "ts", "name": "Old", "display_order": 1},
         )
-        assert client.delete("/api/v1/meta/subjects/ts").status_code == 204
-        assert client.get("/api/v1/meta/subjects").json() == []
+        assert client.delete("/api/v1/meta/metadata/ts").status_code == 204
+        assert client.get("/api/v1/meta/metadata").json() == []
 
     # --- Topics ---
 
@@ -148,11 +148,11 @@ class TestMetaMutations:
         """POST /meta/topics — create a new topic."""
         # Need a grade and subject for topic FKs / logic
         client.post(
-            "/api/v1/meta/grades",
+            "/api/v1/meta/metadata",
             json={"id": "S1", "name": "S1", "level": "secondary", "display_order": 1},
         )
         client.post(
-            "/api/v1/meta/subjects",
+            "/api/v1/meta/metadata",
             json={"id": "math", "name": "Math", "display_order": 1},
         )
 
@@ -174,11 +174,11 @@ class TestMetaMutations:
         """PATCH /meta/topics/{id} — update a topic."""
         # Setup
         client.post(
-            "/api/v1/meta/grades",
+            "/api/v1/meta/metadata",
             json={"id": "S1", "name": "S1", "level": "sec", "display_order": 1},
         )
         client.post(
-            "/api/v1/meta/subjects",
+            "/api/v1/meta/metadata",
             json={"id": "math", "name": "Math", "display_order": 1},
         )
         t_data = client.post(
@@ -201,11 +201,11 @@ class TestMetaMutations:
     def test_delete_topic(self, client: TestClient):
         """DELETE /meta/topics/{id} — delete a topic."""
         client.post(
-            "/api/v1/meta/grades",
+            "/api/v1/meta/metadata",
             json={"id": "S1", "name": "S1", "level": "sec", "display_order": 1},
         )
         client.post(
-            "/api/v1/meta/subjects",
+            "/api/v1/meta/metadata",
             json={"id": "math", "name": "Math", "display_order": 1},
         )
         t_data = client.post(

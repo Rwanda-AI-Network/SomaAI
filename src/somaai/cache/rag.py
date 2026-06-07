@@ -5,9 +5,18 @@ Integrates with existing cache infrastructure but adds RAG-specific logic.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any
+
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_fixed,
+)
 
 try:
     import xxhash
@@ -60,54 +69,70 @@ class EmbeddingCache:
             query_hash = hashlib.sha256(query.encode()).hexdigest()[:16]
         return f"rag:emb:{query_hash}"
 
+    @retry(
+        stop=stop_after_attempt(2),
+        wait=wait_fixed(0.5),
+        retry=retry_if_exception_type(Exception),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
     async def get(self, query: str) -> list[float] | None:
-        """Get cached embedding for query."""
+        """Get cached embedding for query with retry and timeout."""
         if not self._enabled:
             return None
 
         try:
-            redis = await self._get_redis()
-            if not redis:
+            async with asyncio.timeout(2.0):
+                redis = await self._get_redis()
+                if not redis:
+                    return None
+
+                key = self._make_key(query)
+                cached = await redis.get(key)
+
+                if cached:
+                    logger.debug(f"Embedding cache HIT: {query[:50]}...")
+                    return json.loads(cached)
+
                 return None
 
-            key = self._make_key(query)
-            cached = await redis.get(key)
-
-            if cached:
-                logger.debug(f"Embedding cache HIT: {query[:50]}...")
-                return json.loads(cached)
-
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.warning(f"Embedding cache get failed (timeout={isinstance(e, asyncio.TimeoutError)}): {e}")
             return None
 
-        except Exception as e:
-            logger.warning(f"Embedding cache get failed: {e}")
-            return None
-
+    @retry(
+        stop=stop_after_attempt(2),
+        wait=wait_fixed(0.5),
+        retry=retry_if_exception_type(Exception),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
     async def set(self, query: str, embedding: list[float]) -> None:
-        """Store embedding in cache."""
+        """Store embedding in cache with retry and timeout."""
         if not self._enabled:
             return
 
         try:
-            redis = await self._get_redis()
-            if not redis:
-                return
+            async with asyncio.timeout(2.0):
+                redis = await self._get_redis()
+                if not redis:
+                    return
 
-            from somaai.utils.serialization import json_serializer
+                from somaai.utils.serialization import json_serializer
 
-            key = self._make_key(query)
-            await redis.setex(
-                key, self.ttl, json.dumps(embedding, default=json_serializer)
-            )
+                key = self._make_key(query)
+                await redis.setex(
+                    key, self.ttl, json.dumps(embedding, default=json_serializer)
+                )
 
-        except Exception as e:
-            logger.warning(f"Embedding cache set failed: {e}")
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.warning(f"Embedding cache set failed (timeout={isinstance(e, asyncio.TimeoutError)}): {e}")
 
 
 class ResponseCache:
     """Cache for complete RAG responses.
 
-    Caches by query + grade + subject, only for high-confidence responses.
+    Caches by query + grade + subject + user_role, only for high-confidence responses.
     """
 
     def __init__(
@@ -140,9 +165,11 @@ class ResponseCache:
                 self._enabled = False
         return self._redis
 
-    def _make_key(self, query: str, grade: str, subject: str) -> str:
+    def _make_key(
+        self, query: str, grade: str, subject: str, user_role: str = "student"
+    ) -> str:
         """Generate cache key from query parameters using fast hash."""
-        data = f"{query}|{grade}|{subject}"
+        data = f"{query}|{grade}|{subject}|{user_role}"
         if USE_XXHASH:
             # xxhash is 10x faster than SHA-256 for short strings
             key_hash = xxhash.xxh64(data).hexdigest()[:16]
@@ -151,46 +178,64 @@ class ResponseCache:
             key_hash = hashlib.sha256(data.encode()).hexdigest()[:16]
         return f"rag:resp:{key_hash}"
 
+    @retry(
+        stop=stop_after_attempt(2),
+        wait=wait_fixed(0.5),
+        retry=retry_if_exception_type(Exception),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
     async def get(
         self,
         query: str,
         grade: str,
         subject: str,
+        user_role: str = "student",
     ) -> dict[str, Any] | None:
-        """Get cached response."""
+        """Get cached response with retry and timeout."""
         if not self._enabled:
             return None
 
         try:
-            redis = await self._get_redis()
-            if not redis:
+            async with asyncio.timeout(2.0):
+                redis = await self._get_redis()
+                if not redis:
+                    return None
+
+                key = self._make_key(query, grade, subject, user_role)
+                cached = await redis.get(key)
+
+                if cached:
+                    logger.info(f"Response cache HIT: {query[:50]}...")
+                    response = json.loads(cached)
+                    response["from_cache"] = True
+                    return response
+
                 return None
 
-            key = self._make_key(query, grade, subject)
-            cached = await redis.get(key)
-
-            if cached:
-                logger.info(f"Response cache HIT: {query[:50]}...")
-                response = json.loads(cached)
-                response["from_cache"] = True
-                return response
-
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.warning(f"Response cache get failed (timeout={isinstance(e, asyncio.TimeoutError)}): {e}")
             return None
 
-        except Exception as e:
-            logger.warning(f"Response cache get failed: {e}")
-            return None
-
+    @retry(
+        stop=stop_after_attempt(2),
+        wait=wait_fixed(0.5),
+        retry=retry_if_exception_type(Exception),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
     async def set(
         self,
         query: str,
         grade: str,
         subject: str,
         response: dict[str, Any],
+        user_role: str = "student",
     ) -> None:
-        """Store response in cache.
+        """Store response in cache with retry and timeout.
 
         Only caches high-confidence, grounded responses.
+        Citations are now included in cache for consistency.
         """
         if not self._enabled:
             return
@@ -208,25 +253,30 @@ class ResponseCache:
             return
 
         try:
-            redis = await self._get_redis()
-            if not redis:
-                return
+            async with asyncio.timeout(2.0):
+                redis = await self._get_redis()
+                if not redis:
+                    return
 
-            key = self._make_key(query, grade, subject)
+                key = self._make_key(query, grade, subject, user_role)
 
-            # Don't cache large fields
-            response_copy = {k: v for k, v in response.items()}
-            response_copy.pop("citations", None)
+                # Cache the full response including citations
+                # Citations are small (~1KB) and important for transparency
+                response_copy = {k: v for k, v in response.items()}
 
-            from somaai.utils.serialization import json_serializer
+                # Only remove truly large fields that aren't needed
+                response_copy.pop("chunks_map", None)  # Internal mapping, not needed
+                response_copy.pop("retrieved_chunks", None)  # Debug data, not needed
 
-            await redis.setex(
-                key, self.ttl, json.dumps(response_copy, default=json_serializer)
-            )
-            logger.info(f"Cached response: {query[:50]}...")
+                from somaai.utils.serialization import json_serializer
 
-        except Exception as e:
-            logger.warning(f"Response cache set failed: {e}")
+                await redis.setex(
+                    key, self.ttl, json.dumps(response_copy, default=json_serializer)
+                )
+                logger.info(f"Cached response with citations: {query[:50]}...")
+
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.warning(f"Response cache set failed (timeout={isinstance(e, asyncio.TimeoutError)}): {e}")
 
     async def invalidate_pattern(self, pattern: str = "rag:resp:*") -> int:
         """Invalidate cache entries matching pattern."""

@@ -41,7 +41,7 @@ class TestLogRagRequest:
         log_rag_request(
             query="broken query",
             grade="P6",
-            subject="math",
+            subject="mathematics",
             user_role="teacher",
             docs_retrieved=0,
             docs_reranked=0,
@@ -103,11 +103,11 @@ class TestSetupMetrics:
         from somaai.monitoring import setup_metrics
 
         mock_settings = MagicMock()
-        mock_settings.version = "0.1.0"
-        mock_settings.app_name = "SomaAI"
-        mock_settings.rag_enable_input_validation = True
-        mock_settings.debug = False
-        mock_settings.require_api_key = False
+        mock_settings.server.version = "0.1.0"
+        mock_settings.server.app_name = "SomaAI"
+        mock_settings.security.rag_enable_input_validation = True
+        mock_settings.server.debug = False
+        mock_settings.security.require_api_key = False
 
         # Should not raise
         setup_metrics(mock_settings)

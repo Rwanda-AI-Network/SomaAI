@@ -67,13 +67,13 @@ class Retriever:
             query: User's question
             top_k: Number of documents to retrieve
             grade: Filter by grade level (e.g., "S1", "P6")
-            subject: Subject filter (reserved for future use, not applied)
+            subject: Subject filter (e.g., "mathematics", "general")
 
         Returns:
             List of documents with content, metadata, and scores
         """
         # Input validation
-        if getattr(self.settings, "rag_enable_input_validation", True):
+        if self.settings.rag_enable_input_validation:
             if not query or not query.strip():
                 logger.warning("Empty query provided to retriever")
                 return []
@@ -89,7 +89,7 @@ class Retriever:
             query = query.strip()
 
         # Normalize metadata filters to canonical casing.
-        # Grade: UPPERCASE (matches GradeLevel enum: P6, S1, S6)
+        # Grade: UPPERCASE (matches DB convention: P6, S1, S6)
         # Subject: lowercase (matches Subject enum: computer_science)
         if grade:
             grade = grade.strip().upper()
@@ -100,14 +100,11 @@ class Retriever:
 
         try:
             # Dense retrieval using Qdrant vector store
-            # NOTE: subject filter disabled for now — only grade is applied.
-            # Subject filtering will be re-enabled once ingestion metadata
-            # is aligned with frontend selections.
             docs = await self.store.search(
                 query=query,
                 top_k=top_k,
                 grade=grade,
-                subject=None,  # Disabled: subject filter not yet supported
+                subject=subject,
             )
 
             # Log retrieval metrics
@@ -161,7 +158,7 @@ class Retriever:
         Args:
             query: User's question
             grade: Grade level filter
-            subject: Subject filter (reserved for future use)
+            subject: Subject filter (e.g., "mathematics", "general")
             top_k: Number of documents
             min_score: Minimum relevance score
             min_results: Minimum acceptable result count
@@ -278,7 +275,7 @@ class Retriever:
         Args:
             query: User's question
             grade: Grade level filter
-            subject: Subject filter (reserved for future use)
+            subject: Subject filter (e.g., "mathematics", "general")
             max_tokens: Maximum tokens for context window
             use_fallback: Whether to use fallback strategy
 
@@ -323,7 +320,18 @@ class Retriever:
         # Format context with source references
         context_parts = []
         total_chars = 0
-        char_limit = max_tokens * 4  # Rough char-to-token ratio
+
+        # Use a very conservative ratio for safety (avg 4 chars/token for English,
+        # but 2.8 for robustness against dense text) and subtract a buffer for
+        # the system prompt, instructions, and query.
+        tokens_reserved_for_docs = max(500, max_tokens - 1200)
+        char_limit = int(tokens_reserved_for_docs * 2.8)
+
+        logger.debug(
+            "Building context with char_limit=%d for ~%d tokens",
+            char_limit,
+            tokens_reserved_for_docs,
+        )
 
         for i, doc in enumerate(docs):
             metadata = doc.get("metadata", {})
@@ -353,8 +361,10 @@ class Retriever:
             # Check token limit
             if total_chars + len(chunk) > char_limit:
                 logger.debug(
-                    "Context limit reached: %d chars, stopping at doc %d/%d",
+                    "Context limit reached: %d chars (~%d tokens), "
+                    "stopping at doc %d/%d",
                     total_chars,
+                    total_chars // 3,
                     i,
                     len(docs),
                 )
@@ -367,7 +377,7 @@ class Retriever:
             "Context built: %d chunks, %d chars (~%d tokens)",
             len(context_parts),
             total_chars,
-            total_chars // 4,
+            total_chars // 3,
         )
 
         # Return only the docs that were included in context

@@ -38,7 +38,7 @@ _PATTERNS: list[tuple[re.Pattern, str]] = [
     # Gratitude
     (
         re.compile(
-            r"^(thanks?|thank\s*you|thx|merci|murakoze"
+            r"^(okay,?\s*|alright,?\s*|sure,?\s*|cool,?\s*)?(thanks?|thank\s*you|thx|merci|murakoze"
             r"|appreciate\s*it)\s*[!?.]*$",
             re.IGNORECASE,
         ),

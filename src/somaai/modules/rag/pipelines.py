@@ -6,6 +6,7 @@ Includes security, caching, debug logging, and fallback strategies.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -35,7 +36,6 @@ class BaseRAGPipeline(Protocol):
         grade: str = "S1",
         subject: str = "general",
         user_role: str = "student",
-        session_id: str | None = None,
         preferences: dict | None = None,
         history: str = "",
     ) -> dict: ...
@@ -76,7 +76,6 @@ class RAGPipeline:
         grade: str = "S1",
         subject: str = "general",
         user_role: str = "student",
-        session_id: str | None = None,
         preferences: dict | None = None,
         history: str = "",
     ) -> dict:
@@ -87,7 +86,6 @@ class RAGPipeline:
             grade: Grade level (e.g., "S1", "P6")
             subject: Subject (e.g., "mathematics", "biology")
             user_role: 'student' or 'teacher'
-            session_id: Optional session for context
             preferences: Dict with 'enable_analogy' and 'enable_realworld'
             history: Previous conversation history
 
@@ -102,18 +100,34 @@ class RAGPipeline:
         # Initialize debugger (no-op when disabled)
         from somaai.utils.debug import PipelineDebugger
 
-        debug = PipelineDebugger(enabled=getattr(self.settings, "debug", False))
+        debug = PipelineDebugger(enabled=self.settings.debug)
         debug.start(query, grade, subject)
 
         try:
             # 0. Check response cache
             from somaai.cache.rag import get_response_cache
+            from somaai.modules.rag.generator import _is_follow_up, _is_repeat_question
 
             cache = get_response_cache()
-            cached_response = await cache.get(query, grade, subject)
-            if cached_response:
-                debug.log_stage("cache", hit=True)
-                return cached_response
+
+            # Bypass cache if there is conversation history (to prevent
+            # reused answers) or if this is a repeat/follow-up question
+            has_history = bool(history and history.strip())
+            is_follow = _is_follow_up(query, has_history)
+            is_repeat = _is_repeat_question(query, history) if has_history else False
+            skip_cache = has_history or is_follow or is_repeat
+
+            if not skip_cache:
+                cached_response = await cache.get(query, grade, subject, user_role)
+                if cached_response:
+                    debug.log_stage("cache", hit=True)
+                    return cached_response
+
+            if is_follow or is_repeat:
+                logger.info(
+                    "Detected %s — cache bypassed for fresh answer",
+                    "follow-up" if is_follow else "repeat question",
+                )
 
             # 1. Sanitize input
             clean_query = sanitize_query(query)
@@ -141,20 +155,31 @@ class RAGPipeline:
             # 2. Query condensation (only if history exists)
             search_query = clean_query
             if history and history.strip():
-                search_query = await self._condense_query(clean_query, history)
+                search_query = await self._condense_query(clean_query, history, grade, subject)
                 debug.log_stage(
                     "condense",
                     original=clean_query,
                     condensed=search_query,
                 )
 
-            # 3. Retrieve relevant documents
-            docs, context_str = await self.retriever.retrieve_for_context(
-                query=search_query,
-                grade=grade,
-                subject=subject,
-                use_fallback=True,
-            )
+            # 3. Retrieve relevant documents with 10s timeout and fallback
+            try:
+                async with asyncio.timeout(10.0):
+                    docs, context_str = await self.retriever.retrieve_for_context(
+                        query=search_query,
+                        grade=grade,
+                        subject=subject,
+                        use_fallback=True,
+                    )
+            except (asyncio.TimeoutError, Exception) as e:
+                logger.error(
+                    f"Retrieval stage failed or timed out (timeout={isinstance(e, asyncio.TimeoutError)}): {e}",
+                    extra={"query": search_query, "grade": grade},
+                )
+                # Mandatory fallback: insufficient context
+                response = self._insufficient_context_response(query, grade, subject)
+                debug.end(response)
+                return response
 
             debug.log_stage(
                 "retrieve",
@@ -170,17 +195,29 @@ class RAGPipeline:
                 debug.end(response)
                 return response
 
-            # 5. Generate response
-            result = await self.generator.generate(
-                query=search_query,
-                context=context_str,
-                grade=grade,
-                user_role=user_role,
-                include_analogy=include_analogy,
-                include_realworld=include_realworld,
-                retrieved_docs=docs,
-                history=history,
-            )
+            # 5. Generate response with 20s timeout and fallback
+            try:
+                async with asyncio.timeout(20.0):
+                    result = await self.generator.generate(
+                        query=search_query,
+                        context=context_str,
+                        grade=grade,
+                        subject=subject,
+                        user_role=user_role,
+                        include_analogy=include_analogy,
+                        include_realworld=include_realworld,
+                        retrieved_docs=docs,
+                        history=history,
+                    )
+            except (asyncio.TimeoutError, Exception) as e:
+                logger.error(
+                    f"Generation stage failed or timed out (timeout={isinstance(e, asyncio.TimeoutError)}): {e}",
+                    extra={"query": search_query, "context_len": len(context_str)},
+                )
+                # Mandatory fallback: safe failed response
+                response = self._safe_fallback_response(query, grade, subject)
+                debug.end(response)
+                return response
 
             debug.log_stage(
                 "generate",
@@ -212,7 +249,7 @@ class RAGPipeline:
             }
 
             # 8. Cache response
-            await cache.set(query, grade, subject, response)
+            await cache.set(query, grade, subject, response, user_role)
 
             # 9. Log for observability (writes both structured log + Prometheus)
             latency_ms = (time.time() - start_time) * 1000
@@ -249,7 +286,7 @@ class RAGPipeline:
             )
             raise
 
-    async def _condense_query(self, query: str, history: str) -> str:
+    async def _condense_query(self, query: str, history: str, grade: str, subject: str) -> str:
         """Rewrite query to be standalone using history.
 
         Args:
@@ -268,7 +305,10 @@ class RAGPipeline:
             llm = get_llm(self.settings)
 
             prompt = CONDENSE_QUESTION_PROMPT.format(
-                chat_history=history, question=query
+                chat_history=history,
+                question=query,
+                grade=grade,
+                subject=subject,
             )
 
             response_json = await llm.generate(prompt)
@@ -296,7 +336,7 @@ class RAGPipeline:
         self,
         query: str,
         grade: str,
-        subject: str,
+        subject: str = "general",
     ) -> dict:
         """Generate response when no relevant documents found.
 
@@ -318,6 +358,39 @@ class RAGPipeline:
                 f"3. Asking a more specific question"
             ),
             "sufficiency": "insufficient",
+            "citations": [],
+            "chunks_map": {},
+            "analogy": None,
+            "realworld_context": None,
+            "created_at": utc_now(),
+        }
+
+    def _safe_fallback_response(
+        self,
+        query: str,
+        grade: str,
+        subject: str = "general",
+    ) -> dict:
+        """Generate safe fallback when LLM fails or times out.
+
+        Args:
+            query: Original query
+            grade: Grade level
+            subject: Subject
+
+        Returns:
+            Safe generic response
+        """
+        return {
+            "message_id": generate_id(),
+            "answer": (
+                "I'm sorry, I'm currently unable to provide a detailed answer "
+                "to your question. This might be due to a technical issue or "
+                "heavy load on the system. Please try again in a moment."
+            ),
+            "sufficiency": "sufficient", # Return as sufficient to prevent recursive retry
+            "is_grounded": False,
+            "confidence": 0.0,
             "citations": [],
             "chunks_map": {},
             "analogy": None,

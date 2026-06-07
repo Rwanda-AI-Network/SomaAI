@@ -1,10 +1,10 @@
 """RAG pipeline debug logging.
 
 Provides structured, stage-by-stage logging for the RAG pipeline.
-Enabled when settings.debug = True.
+Enabled when settings.server.debug = True.
 
 Usage in pipeline:
-    debug = PipelineDebugger(enabled=settings.debug)
+    debug = PipelineDebugger(enabled=settings.server.debug)
     debug.start(query, grade, subject)
     debug.log_stage("retrieve", docs_found=5, top_score=0.82)
     debug.end(response)
@@ -37,7 +37,7 @@ class PipelineDebugger:
     Accumulates stage data (timing, doc counts, decisions) across
     a single pipeline run and logs them in a readable format.
 
-    Controlled by settings.debug — does nothing when disabled.
+    Controlled by settings.server.debug — does nothing when disabled.
     """
 
     def __init__(self, enabled: bool = False) -> None:

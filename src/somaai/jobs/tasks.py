@@ -48,6 +48,7 @@ async def ingest_document_task(
         title: Optional document title
     """
     import asyncio
+    import logging
     from pathlib import Path
 
     from somaai.db import crud
@@ -62,17 +63,36 @@ async def ingest_document_task(
         # Fetch file as managed stream from object storage.
         # The StorageStream context manager guarantees close/release_conn.
         storage = get_storage()
+        _task_logger = logging.getLogger(__name__)
+
         async with storage.open(storage_key) as file_stream:
             orchestrator = IngestionOrchestrator(settings)
 
-            # Sync-compatible progress callback that schedules async DB updates
+            # Sync-compatible progress callback that schedules async DB updates.
+            # asyncio.shield prevents the update coroutine from being silently
+            # cancelled if the ingestion task itself is cancelled mid-flight.
+            # Exceptions are caught and logged rather than swallowed.
             def on_progress(stage: str, pct: int) -> None:
-                """Sync progress callback - schedules async update."""
+                """Sync progress callback — schedules a shielded async update."""
                 try:
                     loop = asyncio.get_running_loop()
-                    loop.create_task(update_job_progress(job_id, pct, stage))
+
+                    async def _safe_update() -> None:
+                        try:
+                            await asyncio.shield(
+                                update_job_progress(job_id, pct, stage)
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            _task_logger.warning(
+                                "Progress update failed (job=%s stage=%s): %s",
+                                job_id,
+                                stage,
+                                exc,
+                            )
+
+                    loop.create_task(_safe_update())
                 except RuntimeError:
-                    pass  # No running loop, skip progress update
+                    pass  # No running loop (e.g. sync test context) — skip
 
             result = await orchestrator.run(
                 doc_id=doc_id,
@@ -89,6 +109,19 @@ async def ingest_document_task(
         page_count = result.get("pages", 0) if isinstance(result, dict) else 0
         async with async_session_maker() as db:
             await crud.update_document_processed(db, doc_id, page_count)
+
+        # Invalidate cached RAG responses so new content is reflected
+        try:
+            from somaai.cache.rag import get_response_cache
+
+            cache = get_response_cache()
+            await cache.invalidate_pattern("rag:resp:*")
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                "RAG cache invalidation failed after ingest (job=%s): %s",
+                job_id,
+                exc,
+            )
 
         await update_job_status(
             job_id,

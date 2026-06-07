@@ -75,7 +75,11 @@ def normalize_metadata(
                 changes["metadata.grade"] = grade.strip().upper()
 
             subject = meta.get("subject")
-            if subject and isinstance(subject, str) and subject != subject.strip().lower():
+            if (
+                subject
+                and isinstance(subject, str)
+                and subject != subject.strip().lower()
+            ):
                 changes["metadata.subject"] = subject.strip().lower()
 
             if changes:

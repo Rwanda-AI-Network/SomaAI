@@ -16,10 +16,25 @@ GRADES = [
 ]
 
 SUBJECTS = [
-    {"id": "computer_science", "name": "Computer Science", "icon": "cpu", "display_order": 1},
-    {"id": "mathematics", "name": "Mathematics", "icon": "calculator", "display_order": 2},
+    {
+        "id": "computer_science",
+        "name": "Computer Science",
+        "icon": "cpu",
+        "display_order": 1,
+    },
+    {
+        "id": "mathematics",
+        "name": "Mathematics",
+        "icon": "calculator",
+        "display_order": 2,
+    },
     {"id": "english", "name": "English", "icon": "book", "display_order": 3},
-    {"id": "kinyarwanda", "name": "Kinyarwanda", "icon": "message-circle", "display_order": 4},
+    {
+        "id": "kinyarwanda",
+        "name": "Kinyarwanda",
+        "icon": "message-circle",
+        "display_order": 4,
+    },
     {"id": "science", "name": "Science", "icon": "flask-conical", "display_order": 5},
 ]
 

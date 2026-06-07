@@ -11,9 +11,7 @@ from somaai.contracts.chat import (
     MessageResponse,
 )
 from somaai.contracts.common import (
-    GradeLevel,
     PaginatedResponse,
-    Subject,
     UserRole,
 )
 from somaai.contracts.docs import (
@@ -34,8 +32,7 @@ from somaai.contracts.jobs import (
     JobStatus,
 )
 from somaai.contracts.meta import (
-    GradeResponse,
-    SubjectResponse,
+    MetadataResponse,
     TopicResponse,
 )
 from somaai.contracts.quiz import (
@@ -53,8 +50,6 @@ __all__ = [
     # Common
     "PaginatedResponse",
     "UserRole",
-    "GradeLevel",
-    "Subject",
     # Errors
     "ErrorResponse",
     "ValidationErrorResponse",
@@ -79,8 +74,7 @@ __all__ = [
     "FeedbackRequest",
     "FeedbackResponse",
     # Meta
-    "GradeResponse",
-    "SubjectResponse",
+    "MetadataResponse",
     "TopicResponse",
     # Jobs
     "JobStatus",

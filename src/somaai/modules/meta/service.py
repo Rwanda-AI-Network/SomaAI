@@ -1,12 +1,16 @@
-"""Metadata service with in-process TTL cache.
+"""Metadata service with two-tier (L1 + L2) TTL cache.
 
 Serves curriculum metadata (grades, subjects, topics) from PostgreSQL
-with a lightweight cache layer. Data is small (~53 KB max) and rarely
-changes, so in-process caching avoids Redis overhead.
+with a two-tier cache:
+- **L1**: In-process dict (60s TTL) — sub-millisecond reads within a worker.
+- **L2**: Redis db/2 (5min TTL) — cross-worker consistency.
+
+Redis failures degrade gracefully to L1-only operation.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Any
@@ -14,12 +18,9 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from somaai.contracts.meta import (
-    GradeCreate,
-    GradeResponse,
-    GradeUpdate,
-    SubjectCreate,
-    SubjectResponse,
-    SubjectUpdate,
+    MetadataCreate,
+    MetadataResponse,
+    MetadataUpdate,
     TopicCreate,
     TopicResponse,
     TopicUpdate,
@@ -29,56 +30,91 @@ from somaai.db import crud
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# In-process TTL cache
+# Two-tier TTL cache: L1 (in-process) + L2 (Redis)
 # ---------------------------------------------------------------------------
-# Metadata changes only via seed script or admin operations.
-# 5-minute TTL is safe: worst case a new seed takes 5 min to surface.
-_cache: dict[str, tuple[float, Any]] = {}
-CACHE_TTL = 300  # seconds
+_cache: dict[str, tuple[float, Any]] = {}  # L1
+CACHE_L1_TTL = 60  # 1 minute in-process
+CACHE_L2_TTL = 300  # 5 minutes in Redis
+CACHE_TTL = CACHE_L2_TTL  # Legacy alias for tests
+_L2_PREFIX = "meta:"  # Redis key namespace
 
 
-# Temporary solution for UI display ordering of grades and subjects.
-GRADE_DISPLAY: dict[str, dict[str, str | int]] = {
-    "P6": {"name": "Primary 6", "level": "primary", "order": 1},
-    "S1": {"name": "Senior 1", "level": "secondary", "order": 2},
-    "S2": {"name": "Senior 2", "level": "secondary", "order": 3},
-    "S3": {"name": "Senior 3", "level": "secondary", "order": 4},
-    "S4": {"name": "Senior 4", "level": "secondary", "order": 5},
-    "S5": {"name": "Senior 5", "level": "secondary", "order": 6},
-    "S6": {"name": "Senior 6", "level": "secondary", "order": 7},
-}
-
-SUBJECT_DISPLAY: dict[str, dict[str, str | int]] = {
-    "computer_science": {"name": "Computer Science", "icon": "monitor", "order": 1},
-    "mathematics": {"name": "Mathematics", "icon": "calculator", "order": 2},
-    "biology": {"name": "Biology", "icon": "flask-conical", "order": 3},
-    "physics": {"name": "Physics", "icon": "atom", "order": 4},
-    "chemistry": {"name": "Chemistry", "icon": "beaker", "order": 5},
-    "english": {"name": "English", "icon": "book", "order": 6},
-    "accounting": {"name": "Accounting", "icon": "file-spreadsheet", "order": 7},
-}
+def _json_default(obj: Any) -> Any:
+    """JSON serialiser fallback for Pydantic models."""
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump()
+    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 
-def _get_cached(key: str) -> Any | None:
-    """Return cached value if not expired, else None."""
+async def _get_cached(key: str) -> Any | None:
+    """Two-tier lookup: L1 (in-process) → L2 (Redis)."""
+    # L1 check
     entry = _cache.get(key)
     if entry is not None:
         expires, value = entry
         if time.monotonic() < expires:
             return value
         del _cache[key]
+
+    # L2 check (Redis)
+    try:
+        from somaai.utils.redis import get_cache_redis
+
+        redis = await get_cache_redis()
+        raw = await redis.get(f"{_L2_PREFIX}{key}")
+        if raw:
+            value = json.loads(raw)
+            # Promote to L1
+            _cache[key] = (time.monotonic() + CACHE_L1_TTL, value)
+            return value
+    except Exception:  # noqa: BLE001 — Redis down is non-fatal
+        pass
+
     return None
 
 
-def _set_cached(key: str, value: Any) -> None:
-    """Store value with TTL."""
-    _cache[key] = (time.monotonic() + CACHE_TTL, value)
+async def _set_cached(key: str, value: Any) -> None:
+    """Write to L1 + L2."""
+    _cache[key] = (time.monotonic() + CACHE_L1_TTL, value)
+    try:
+        from somaai.utils.redis import get_cache_redis
+
+        redis = await get_cache_redis()
+        await redis.setex(
+            f"{_L2_PREFIX}{key}",
+            CACHE_L2_TTL,
+            json.dumps(value, default=_json_default),
+        )
+    except Exception:  # noqa: BLE001
+        pass  # L1 still works
 
 
 def invalidate_meta_cache() -> None:
-    """Clear all cached metadata. Call after seeding or admin changes."""
+    """Clear L1 cache (sync). L2 cleared async via _invalidate_l2()."""
     _cache.clear()
-    logger.info("Meta cache invalidated")
+    logger.info("Meta L1 cache invalidated")
+
+
+async def _invalidate_l2() -> None:
+    """Clear all L2 (Redis) meta keys. Best-effort."""
+    try:
+        from somaai.utils.redis import get_cache_redis
+
+        redis = await get_cache_redis()
+
+        # Check if scan_iter is a mock (tests) or real Redis
+        scan_iter = redis.scan_iter(match=f"{_L2_PREFIX}*")
+
+        # If it's a mock, it won't have __aiter__, skip gracefully
+        if not hasattr(scan_iter, "__aiter__"):
+            return
+
+        keys = [k async for k in scan_iter]
+        if keys:
+            await redis.delete(*keys)
+            logger.info("Meta L2 cache invalidated (%d keys)", len(keys))
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -94,113 +130,161 @@ class MetaService:
 
     Usage:
         service = MetaService(db_session)
-        grades = await service.get_grades()
+        grades = await service.get_metadata(meta_type="grade")
     """
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def get_grades(self, only_with_docs: bool = False) -> list[GradeResponse]:
-        """Get all available grade levels.
+    # ---------------------------------------------------------------------------
+    # Metadata (grades + subjects)
+    # ---------------------------------------------------------------------------
 
-        Args:
-            only_with_docs: If True, only return grades that have at least one document.
-
-        Returns:
-            List of grades sorted by display_order
-        """
-        cache_key = f"grades:only_docs={only_with_docs}"
-        cached = _get_cached(cache_key)
-        if cached is not None:
-            return cached
-
-        if only_with_docs:
-            grade_ids = await crud.get_distinct_grades(self.db)
-            # Find the actual Grade objects for these IDs to get full metadata
-            all_grades = await crud.get_all_grades(self.db)
-            grades = [g for g in all_grades if g.id in grade_ids]
-        else:
-            grades = await crud.get_all_grades(self.db)
-
-        result = [
-            GradeResponse(
-                id=g.id,
-                name=g.name,
-                display_order=g.display_order,
-                level=g.level,
-            )
-            for g in grades
-        ]
-        # Sort by display_order
-        result.sort(key=lambda g: g.display_order)
-        _set_cached(cache_key, result)
-        logger.debug("Cached %d grades (only_docs=%s)", len(result), only_with_docs)
-        return result
-
-    async def get_subjects(
+    async def get_metadata(
         self,
-        grade: str | None = None,
+        meta_type: str | None = None,
         only_with_docs: bool = False,
-    ) -> list[SubjectResponse]:
-        """Get subjects, optionally filtered by grade and document availability.
+    ) -> list[MetadataResponse]:
+        """Get curriculum metadata entries.
 
         Args:
-            grade: Grade ID to filter by.
-            only_with_docs: If True, only return subjects that have documents.
+            meta_type: Filter by type ('grade' or 'subject'). None = all.
+            only_with_docs: If True, only return entries that have documents.
 
         Returns:
-            List of subjects sorted by display_order
+            List of metadata entries sorted by display_order
         """
-        cache_key = f"subjects:grade={grade}:only_docs={only_with_docs}"
-        cached = _get_cached(cache_key)
+        cache_key = f"metadata:type={meta_type}:only_docs={only_with_docs}"
+        cached = await _get_cached(cache_key)
         if cached is not None:
+            if cached and isinstance(cached[0], dict):
+                return [MetadataResponse(**m) for m in cached]
             return cached
 
+        entries = await crud.get_all_metadata(self.db, meta_type)
+
         if only_with_docs:
-            subject_ids = await crud.get_distinct_subjects(self.db, grade)
-            all_subjects = await crud.get_all_subjects(self.db)
-            subjects = [s for s in all_subjects if s.id in subject_ids]
-        else:
-            subjects = await crud.get_all_subjects(self.db)
+            # Filter to only entries whose key appears in documents
+            if meta_type == "grade":
+                doc_keys = await crud.get_distinct_grades(self.db)
+            elif meta_type == "subject":
+                doc_keys = await crud.get_distinct_subjects(self.db)
+            else:
+                doc_keys = set()
+            entries = [e for e in entries if e.key in doc_keys]
 
         result = [
-            SubjectResponse(
-                id=s.id,
-                name=s.name,
-                display_order=s.display_order,
-                icon=s.icon,
+            MetadataResponse(
+                id=e.id,
+                type=e.type,
+                key=e.key,
+                name=e.name,
+                display_order=e.display_order,
+                is_active=e.is_active,
+                created_at=e.created_at,
+                updated_at=e.updated_at,
             )
-            for s in subjects
+            for e in entries
         ]
-        result.sort(key=lambda s: s.display_order)
-        _set_cached(cache_key, result)
+        result.sort(key=lambda m: m.display_order)
+        await _set_cached(cache_key, result)
         logger.debug(
-            "Cached %d subjects (grade=%s, only_docs=%s)",
+            "Cached %d metadata (type=%s, only_docs=%s)",
             len(result),
-            grade,
+            meta_type,
             only_with_docs,
         )
         return result
 
-        #######################################END############
+    async def check_exists_grade(self, grade_key: str) -> bool:
+        """Check if a grade exists (uses cache)."""
+        from somaai.utils.meta import normalize_grade
+
+        grade_key = normalize_grade(grade_key)
+        entries = await self.get_metadata(meta_type="grade")
+        return any(e.key == grade_key for e in entries)
+
+    async def check_exists_subject(self, subject_key: str) -> bool:
+        """Check if a subject exists (uses cache)."""
+        from somaai.utils.meta import normalize_subject
+
+        subject_key = normalize_subject(subject_key)
+        entries = await self.get_metadata(meta_type="subject")
+        return any(e.key == subject_key for e in entries)
+
+    async def create_metadata(self, data: MetadataCreate) -> MetadataResponse:
+        """Create a new metadata entry and invalidate cache.
+
+        Raises:
+            ConflictError: If entry with same key already exists
+        """
+        import uuid
+
+        entry_dict = data.model_dump()
+        entry_dict["id"] = str(uuid.uuid4())
+
+        # Normalize key based on type
+        if data.type == "grade":
+            entry_dict["key"] = entry_dict["key"].upper()
+        elif data.type == "subject":
+            entry_dict["key"] = entry_dict["key"].lower()
+
+        entry = await crud.create_metadata(self.db, entry_dict)
+        await self._invalidate_all_cache()
+        return MetadataResponse(
+            id=entry.id,
+            type=entry.type,
+            key=entry.key,
+            name=entry.name,
+            display_order=entry.display_order,
+            is_active=entry.is_active,
+            created_at=entry.created_at,
+            updated_at=entry.updated_at,
+        )
+
+    async def update_metadata(
+        self, metadata_id: str, data: MetadataUpdate
+    ) -> MetadataResponse | None:
+        """Update a metadata entry and invalidate cache."""
+        entry = await crud.update_metadata(
+            self.db, metadata_id, data.model_dump(exclude_unset=True)
+        )
+        if not entry:
+            return None
+        await self._invalidate_all_cache()
+        return MetadataResponse(
+            id=entry.id,
+            type=entry.type,
+            key=entry.key,
+            name=entry.name,
+            display_order=entry.display_order,
+            is_active=entry.is_active,
+            created_at=entry.created_at,
+            updated_at=entry.updated_at,
+        )
+
+    async def delete_metadata(self, metadata_id: str) -> bool:
+        """Delete a metadata entry and invalidate cache."""
+        success = await crud.delete_metadata(self.db, metadata_id)
+        if success:
+            await self._invalidate_all_cache()
+        return success
+
+    # ---------------------------------------------------------------------------
+    # Topics
+    # ---------------------------------------------------------------------------
 
     async def get_topics(
         self,
         grade: str,
         subject: str,
     ) -> list[TopicResponse]:
-        """Get topics for a grade and subject combination.
-
-        Args:
-            grade: Grade ID (required, e.g., 'S2')
-            subject: Subject ID (required, e.g., 'biology')
-
-        Returns:
-            List of topics sorted by page_start
-        """
+        """Get topics for a grade and subject combination."""
         cache_key = f"topics:{grade}:{subject}"
-        cached = _get_cached(cache_key)
+        cached = await _get_cached(cache_key)
         if cached is not None:
+            if cached and isinstance(cached[0], dict):
+                return [TopicResponse(**t) for t in cached]
             return cached
 
         topics = await crud.get_topics_by_grade_subject(self.db, grade, subject)
@@ -218,19 +302,12 @@ class MetaService:
             )
             for t in topics
         ]
-        _set_cached(cache_key, result)
+        await _set_cached(cache_key, result)
         logger.debug("Cached %d topics for %s/%s", len(result), grade, subject)
         return result
 
     async def get_topic_by_id(self, topic_id: str) -> TopicResponse | None:
-        """Get a single topic by ID.
-
-        Args:
-            topic_id: Topic ID
-
-        Returns:
-            Topic details or None if not found
-        """
+        """Get a single topic by ID."""
         topic = await crud.get_topic_by_id(self.db, topic_id)
         if topic is None:
             return None
@@ -250,14 +327,7 @@ class MetaService:
         self,
         topic_ids: list[str],
     ) -> list[TopicResponse]:
-        """Get multiple topics by IDs.
-
-        Args:
-            topic_ids: List of topic IDs
-
-        Returns:
-            List of topics (order may differ from input)
-        """
+        """Get multiple topics by IDs."""
         topics = await crud.get_topics_by_ids(self.db, topic_ids)
         return [
             TopicResponse(
@@ -275,78 +345,8 @@ class MetaService:
         ]
 
     # ---------------------------------------------------------------------------
-    # Mutations
+    # Topic mutations
     # ---------------------------------------------------------------------------
-
-    async def create_grade(self, grade_in: GradeCreate) -> GradeResponse:
-        """Create a new grade and invalidate cache."""
-        grade = await crud.create_grade(self.db, grade_in.model_dump())
-        invalidate_meta_cache()
-        return GradeResponse(
-            id=grade.id,
-            name=grade.name,
-            display_order=grade.display_order,
-            level=grade.level,
-        )
-
-    async def update_grade(
-        self, grade_id: str, grade_in: GradeUpdate
-    ) -> GradeResponse | None:
-        """Update a grade and invalidate cache."""
-        grade = await crud.update_grade(
-            self.db, grade_id, grade_in.model_dump(exclude_unset=True)
-        )
-        if not grade:
-            return None
-        invalidate_meta_cache()
-        return GradeResponse(
-            id=grade.id,
-            name=grade.name,
-            display_order=grade.display_order,
-            level=grade.level,
-        )
-
-    async def delete_grade(self, grade_id: str) -> bool:
-        """Delete a grade and invalidate cache."""
-        success = await crud.delete_grade(self.db, grade_id)
-        if success:
-            invalidate_meta_cache()
-        return success
-
-    async def create_subject(self, subject_in: SubjectCreate) -> SubjectResponse:
-        """Create a new subject and invalidate cache."""
-        subject = await crud.create_subject(self.db, subject_in.model_dump())
-        invalidate_meta_cache()
-        return SubjectResponse(
-            id=subject.id,
-            name=subject.name,
-            display_order=subject.display_order,
-            icon=subject.icon,
-        )
-
-    async def update_subject(
-        self, subject_id: str, subject_in: SubjectUpdate
-    ) -> SubjectResponse | None:
-        """Update a subject and invalidate cache."""
-        subject = await crud.update_subject(
-            self.db, subject_id, subject_in.model_dump(exclude_unset=True)
-        )
-        if not subject:
-            return None
-        invalidate_meta_cache()
-        return SubjectResponse(
-            id=subject.id,
-            name=subject.name,
-            display_order=subject.display_order,
-            icon=subject.icon,
-        )
-
-    async def delete_subject(self, subject_id: str) -> bool:
-        """Delete a subject and invalidate cache."""
-        success = await crud.delete_subject(self.db, subject_id)
-        if success:
-            invalidate_meta_cache()
-        return success
 
     async def create_topic(self, topic_in: TopicCreate) -> TopicResponse:
         """Create a new topic and invalidate cache."""
@@ -354,7 +354,7 @@ class MetaService:
 
         topic_id = str(uuid.uuid4())
         topic = await crud.create_topic(self.db, topic_id, topic_in.model_dump())
-        invalidate_meta_cache()
+        await self._invalidate_all_cache()
         return TopicResponse(
             topic_id=topic.id,
             title=topic.title,
@@ -376,7 +376,7 @@ class MetaService:
         )
         if not topic:
             return None
-        invalidate_meta_cache()
+        await self._invalidate_all_cache()
         return TopicResponse(
             topic_id=topic.id,
             title=topic.title,
@@ -393,5 +393,14 @@ class MetaService:
         """Delete a topic and invalidate cache."""
         success = await crud.delete_topic(self.db, topic_id)
         if success:
-            invalidate_meta_cache()
+            await self._invalidate_all_cache()
         return success
+
+    # ---------------------------------------------------------------------------
+    # Cache invalidation
+    # ---------------------------------------------------------------------------
+
+    async def _invalidate_all_cache(self) -> None:
+        """Clear both L1 (in-process) and L2 (Redis) caches."""
+        invalidate_meta_cache()  # L1 — sync
+        await _invalidate_l2()  # L2 — async, best-effort

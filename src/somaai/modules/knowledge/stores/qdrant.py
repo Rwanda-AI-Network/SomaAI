@@ -16,6 +16,7 @@ internal _document_from_point, but raw client.scroll() calls do NOT.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING
 
@@ -30,6 +31,7 @@ from tenacity import (
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
+    wait_random_exponential,
 )
 
 from somaai.modules.knowledge.embeddings import get_embeddings
@@ -133,46 +135,95 @@ class QdrantStore(VectorStore):
         """Get singleton embeddings model."""
         return get_embeddings(self.settings)
 
-    @property
-    def store(self) -> QdrantVectorStore:
-        """Get vector store."""
-        if self._store is None:
-            collection_name = self.settings.qdrant_collection_name
+    async def _ensure_store(self) -> QdrantVectorStore:
+        """Get or lazily initialise the vector store.
 
-            # Ensure collection exists
-            if not self.client.collection_exists(collection_name):
-                logger.info(f"Collection {collection_name} not found, creating...")
+        Replaces the previous synchronous ``store`` property so that the
+        blocking Qdrant ``collection_exists`` / ``create_collection`` calls
+        and HuggingFace ``embed_query`` call are offloaded to a thread.
+        """
+        if self._store is not None:
+            return self._store
 
-                # Determine dimension dynamically
-                try:
-                    # Generate a dummy embedding to get dimension
-                    sample_embedding = self.embeddings.embed_query("test")
-                    dimension = len(sample_embedding)
-                    logger.info(f"Detected embedding dimension: {dimension}")
+        collection_name = self.settings.qdrant_collection
 
-                    from qdrant_client.models import Distance, VectorParams
+        # Hybrid search setup
+        sparse_encoder = None
+        if self.settings.rag_enable_hybrid_search:
+            try:
+                from langchain_qdrant import FastEmbedSparseEncoder
 
-                    self.client.create_collection(
-                        collection_name=collection_name,
-                        vectors_config=VectorParams(
-                            size=dimension, distance=Distance.COSINE
-                        ),
+                sparse_encoder = FastEmbedSparseEncoder(
+                    model_name="Qdrant/bm25",
+                )
+                logger.info("Hybrid search enabled with FastEmbedSparseEncoder (BM25)")
+            except Exception as e:
+                logger.warning(f"Failed to initialize sparse encoder: {e}. Falling back to dense search.")
+
+        # Ensure collection exists — sync I/O → thread
+        exists = await asyncio.to_thread(self.client.collection_exists, collection_name)
+        if not exists:
+            logger.info(f"Collection {collection_name} not found, creating...")
+            try:
+                # Generate a dummy embedding to get dimension — CPU-bound
+                sample_embedding = await asyncio.to_thread(
+                    self.embeddings.embed_query, "test"
+                )
+                dimension = len(sample_embedding)
+                logger.info(f"Detected embedding dimension: {dimension}")
+
+                from qdrant_client.models import Distance, VectorParams
+
+                # If sparse encoder is present, we should configure it in vectors_config
+                # though QdrantVectorStore handles creation if we don't, 
+                # but it's better to be explicit.
+                await asyncio.to_thread(
+                    self.client.create_collection,
+                    collection_name=collection_name,
+                    vectors_config=VectorParams(
+                        size=dimension, distance=Distance.COSINE
+                    ),
+                    # Sparse vectors config is needed for hybrid search in newer Qdrant
+                    sparse_vectors_config=(
+                        {"sparse_vector": {}} if sparse_encoder else None
+                    ),
+                )
+                logger.info(f"Created collection {collection_name}")
+            except Exception as e:
+                logger.error(f"Failed to create collection: {e}")
+
+        # Build constructor arguments dynamically for backward compatibility.
+        # This prevents TypeError if langchain-qdrant < 0.2.0 is installed.
+        store_kwargs = {
+            "client": self.client,
+            "collection_name": collection_name,
+            "embedding": self.embeddings,
+        }
+
+        if sparse_encoder:
+            try:
+                import inspect
+                from langchain_qdrant import QdrantVectorStore as QVS
+
+                sig = inspect.signature(QVS.__init__)
+                if "sparse_encoder" in sig.parameters:
+                    store_kwargs["sparse_encoder"] = sparse_encoder
+                    logger.debug("QdrantVectorStore initialized with hybrid search support")
+                else:
+                    logger.warning(
+                        "Installed langchain-qdrant does not support sparse_encoder. "
+                        "Falling back to dense-only search."
                     )
-                    logger.info(f"Created collection {collection_name}")
-                except Exception as e:
-                    logger.error(f"Failed to create collection: {e}")
-                    # Let downstream fail if needed
+            except Exception as e:
+                logger.warning(f"Metadata inspection for sparse_encoder failed: {e}")
 
-            self._store = QdrantVectorStore(
-                client=self.client,
-                collection_name=collection_name,
-                embedding=self.embeddings,
-            )
+        self._store = QdrantVectorStore(**store_kwargs)
         return self._store
 
-    def as_retriever(self, search_kwargs: dict | None = None):
+    async def as_retriever(self, search_kwargs: dict | None = None):
         """Get as LangChain retriever."""
-        return self.store.as_retriever(search_kwargs=search_kwargs or {})
+        store = await self._ensure_store()
+        return store.as_retriever(search_kwargs=search_kwargs or {})
 
     async def add(
         self,
@@ -221,6 +272,9 @@ class QdrantStore(VectorStore):
             logger.info("All chunks were duplicates, nothing to add")
             return []
 
+        # Ensure store is initialised before adding
+        await self._ensure_store()
+
         # Add with retry logic
         logger.info(f"Adding {len(docs_to_add)} chunks to Qdrant")
         ids = await self._add_with_retry(docs_to_add)
@@ -244,7 +298,8 @@ class QdrantStore(VectorStore):
         Returns:
             Document IDs
         """
-        return await self.store.aadd_documents(docs)
+        store = await self._ensure_store()
+        return await store.aadd_documents(docs)
 
     async def _batch_check_hashes(self, hashes: list[str]) -> set[str]:
         """Batch check which hashes already exist.
@@ -270,8 +325,9 @@ class QdrantStore(VectorStore):
             for i in range(0, len(hashes), batch_size):
                 batch = hashes[i : i + batch_size]
 
-                results = self.client.scroll(
-                    collection_name=self.settings.qdrant_collection_name,
+                results = await asyncio.to_thread(
+                    self.client.scroll,
+                    collection_name=self.settings.qdrant_collection,
                     scroll_filter=Filter(
                         should=[
                             FieldCondition(
@@ -319,8 +375,9 @@ class QdrantStore(VectorStore):
             True if chunks exist
         """
         try:
-            results = self.client.scroll(
-                collection_name=self.settings.qdrant_collection_name,
+            results = await asyncio.to_thread(
+                self.client.scroll,
+                collection_name=self.settings.qdrant_collection,
                 scroll_filter=Filter(
                     must=[
                         FieldCondition(
@@ -345,8 +402,9 @@ class QdrantStore(VectorStore):
             Number deleted
         """
         try:
-            results = self.client.scroll(
-                collection_name=self.settings.qdrant_collection_name,
+            results = await asyncio.to_thread(
+                self.client.scroll,
+                collection_name=self.settings.qdrant_collection,
                 scroll_filter=Filter(
                     must=[
                         FieldCondition(
@@ -361,8 +419,9 @@ class QdrantStore(VectorStore):
             point_ids = [p.id for p in results[0]]
 
             if point_ids:
-                self.client.delete(
-                    collection_name=self.settings.qdrant_collection_name,
+                await asyncio.to_thread(
+                    self.client.delete,
+                    collection_name=self.settings.qdrant_collection,
                     points_selector=point_ids,
                 )
 
@@ -371,6 +430,13 @@ class QdrantStore(VectorStore):
             logger.error(f"Delete failed: {e}")
             return 0
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_random_exponential(multiplier=1, max=10),
+        retry=retry_if_exception_type((ConnectionError, TimeoutError)),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
     async def search(
         self,
         query: str,
@@ -378,7 +444,7 @@ class QdrantStore(VectorStore):
         grade: str | None = None,
         subject: str | None = None,
     ) -> list[dict]:
-        """Search for similar documents with metadata filtering.
+        """Search for similar documents with metadata filtering and retries.
 
         Note: LangChain's asimilarity_search_with_score passes the filter
         directly to qdrant_client.query_points(query_filter=filter).
@@ -393,6 +459,10 @@ class QdrantStore(VectorStore):
 
         Returns:
             List of documents with scores
+
+        Raises:
+            TimeoutError: If search takes longer than 5 seconds
+            ConnectionError: If Qdrant connection fails
         """
         from qdrant_client.models import FieldCondition, Filter, MatchValue
 
@@ -428,11 +498,22 @@ class QdrantStore(VectorStore):
             must_not=must_not_conditions,
         )
 
-        docs = await self.store.asimilarity_search_with_score(
-            query,
-            k=top_k,
-            filter=qdrant_filter,
-        )
+        store = await self._ensure_store()
+
+        # Add timeout for vector search (5 seconds)
+        try:
+            async with asyncio.timeout(5):
+                docs = await store.asimilarity_search_with_score(
+                    query,
+                    k=top_k,
+                    filter=qdrant_filter,
+                )
+        except asyncio.TimeoutError:
+            logger.error(
+                "Qdrant search timeout",
+                extra={"query_length": len(query), "top_k": top_k, "grade": grade},
+            )
+            raise TimeoutError("Vector search timeout after 5 seconds")
 
         return [
             {
@@ -445,15 +526,33 @@ class QdrantStore(VectorStore):
 
     async def delete(self, ids: list[str]) -> None:
         """Delete documents by ID."""
-        await self.store.adelete(ids)
+        store = await self._ensure_store()
+        await store.adelete(ids)
 
     async def search_embedding(
         self,
         embedding: list[float],
         top_k: int = 5,
     ) -> list[dict]:
-        """Search by embedding vector."""
-        docs = await self.store.asimilarity_search_by_vector(embedding, k=top_k)
+        """Search by pre-computed embedding vector.
+
+        Applies the same parent-chunk exclusion filter as ``search()``
+        so callers never receive full-section parent duplicates regardless
+        of which search path they use.
+        """
+        # Exclude parent chunks — mirrors the must_not condition in search()
+        parent_exclusion = Filter(
+            must_not=[
+                FieldCondition(
+                    key=self._meta_key("is_parent"),
+                    match=MatchValue(value=True),
+                )
+            ]
+        )
+        store = await self._ensure_store()
+        docs = await store.asimilarity_search_by_vector(
+            embedding, k=top_k, filter=parent_exclusion
+        )
         return [{"content": d.page_content, "metadata": d.metadata} for d in docs]
 
     async def get_by_ids(self, ids: list[str]) -> list[dict]:
@@ -469,8 +568,9 @@ class QdrantStore(VectorStore):
             return []
 
         try:
-            points = self.client.retrieve(
-                collection_name=self.settings.qdrant_collection_name,
+            points = await asyncio.to_thread(
+                self.client.retrieve,
+                collection_name=self.settings.qdrant_collection,
                 ids=ids,
                 with_payload=True,
                 with_vectors=False,

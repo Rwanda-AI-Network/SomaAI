@@ -15,7 +15,9 @@ async def test_concurrent_ingestion_deduplication():
     This test simulates a race condition where multiple processes start
     the same document at once.
     """
-    settings = Settings(llm_backend="mock")
+    from somaai.settings import LLMSettings
+
+    settings = Settings(llm=LLMSettings(backend="mock"))
     orchestrator = IngestionOrchestrator(settings)
 
     doc_id = "concurrent-doc-001"
@@ -76,7 +78,7 @@ async def test_concurrent_ingestion_deduplication():
                 doc_id=doc_id,
                 file_path=file_path,
                 grade="S1",
-                subject="math",
+                subject="mathematics",
                 skip_if_exists=True,
             )
             for _ in range(3)
@@ -104,7 +106,9 @@ async def test_concurrent_ingestion_deduplication():
 @pytest.mark.asyncio
 async def test_ingestion_error_isolation():
     """Verify that a failure in one ingestion task does not affect others."""
-    settings = Settings(llm_backend="mock")
+    from somaai.settings import LLMSettings
+
+    settings = Settings(llm=LLMSettings(backend="mock"))
     orchestrator = IngestionOrchestrator(settings)
 
     with (

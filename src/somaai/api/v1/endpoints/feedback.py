@@ -45,7 +45,9 @@ async def submit_feedback(
     service = FeedbackService(db)
 
     try:
-        return await service.submit_feedback(data, actor_id)
+        response = await service.submit_feedback(data, actor_id)
+        await db.commit()
+        return response
     except NotFoundError as e:
         raise not_found_exception(str(e))
     except ConflictError as e:
@@ -72,5 +74,5 @@ async def get_feedback(
     feedback = await service.get_feedback_for_message(message_id)
 
     if not feedback:
-        raise not_found_exception(f"Feedback for message {message_id} not found")
+        raise not_found_exception("Feedback not found")
     return feedback

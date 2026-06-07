@@ -14,8 +14,6 @@ from somaai.providers.storage import get_storage
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from somaai.contracts.common import GradeLevel, Subject
-
 logger = logging.getLogger(__name__)
 
 
@@ -27,8 +25,8 @@ class IngestionService:
         db: AsyncSession,
         doc_id: str,
         storage_key: str,
-        grade: GradeLevel,
-        subject: Subject,
+        grade: str,
+        subject: str,
         title: str,
         filename: str,
         content_hash: str | None = None,
@@ -38,32 +36,38 @@ class IngestionService:
         Architecture Decision: Centralizes DB entry and worker handoff to ensure
         consistency between standard, storage-based, and chunked uploads.
         """
+        from somaai.utils.validators import validate_grade, validate_subject
+
+        # 1. Validate grade/subject exist in curriculum_metadata upon the upload
+        grade = await validate_grade(db, grade)
+        subject = await validate_subject(db, subject)
+
         storage = get_storage()
         storage_backend = storage.backend_type
 
-        # 1. Create document record
+        # 2. Create document record
         await crud.create_document(
             db=db,
             doc_id=doc_id,
             filename=filename,
             title=title,
             storage_path=storage_key,
-            grade=grade.value,
-            subject=subject.value,
+            grade=grade,
+            subject=subject,
             storage_backend=storage_backend,
             status="pending",
             content_hash=content_hash,
         )
 
-        # 2. Enqueue background job
+        # 3. Enqueue background job
         job_id = await enqueue_job(
             task_name="ingest_document",
             payload={
                 "doc_id": doc_id,
                 "storage_key": storage_key,
                 "content_hash": content_hash,
-                "grade": grade.value,
-                "subject": subject.value,
+                "grade": grade,
+                "subject": subject,
                 "title": title,
             },
         )

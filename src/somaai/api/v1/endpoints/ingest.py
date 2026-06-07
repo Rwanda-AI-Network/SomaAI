@@ -4,7 +4,6 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from somaai.contracts.common import GradeLevel, Subject
 from somaai.contracts.docs import (
     IngestJobResponse,
     IngestStorageRequest,
@@ -35,7 +34,7 @@ router = APIRouter(prefix="/ingest", tags=["ingest"])
 
 # Allowed file extensions
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".md"}
-MAX_FILE_SIZE = settings.max_ingest_file_size
+MAX_FILE_SIZE = settings.max_file_size
 VALIDATION_THRESHOLD = settings.ingest_validation_threshold
 
 
@@ -71,8 +70,8 @@ def validate_file(file: UploadFile) -> None:
 async def ingest_document(
     request: Request,
     file: UploadFile = File(..., description="Document file (PDF, DOCX)"),
-    grade: GradeLevel = Form(..., description="Grade level"),
-    subject: Subject = Form(..., description="Subject"),
+    grade: str = Form(..., description="Grade level"),
+    subject: str = Form(..., description="Subject"),
     title: str = Form(None, description="Document title (optional)"),
     db: AsyncSession = Depends(get_session),
 ):
@@ -90,11 +89,19 @@ async def ingest_document(
     doc_title = title or Path(filename).stem
 
     # 3. Check file size early
-    if file.size and file.size > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File too large. Maximum size: {MAX_FILE_SIZE // (1024 * 1024)}MB",
-        )
+    if file.size is not None:
+        if file.size == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Empty file uploaded. Please upload a valid document.",
+            )
+        if file.size > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"File too large. Maximum size: {MAX_FILE_SIZE // (1024 * 1024)}MB"
+                ),
+            )
 
     try:
         # 4. Content validation for small files
@@ -118,11 +125,31 @@ async def ingest_document(
         if isinstance(e, ValueError):
             raise HTTPException(status_code=400, detail=str(e))
         raise
+    except ConnectionError as e:
+        logger.error(
+            "Storage service connection failed",
+            extra={"filename": filename, "error": str(e)},
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Storage service temporarily unavailable. Please try again shortly.",
+        )
     except Exception as e:
-        logger.error(f"Ingestion failed: {e}", exc_info=True)
+        logger.error(
+            "Ingestion failed",
+            extra={
+                "doc_id": doc_id,
+                "filename": filename,
+                "grade": grade,
+                "subject": subject,
+                "error": str(e),
+            },
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=500,
-            detail=f"Internal server error: {str(e)}",
+            detail="An unexpected error occurred. Please try again.",
         )
 
     # 6. Centralized Handover to Ingestion Pipeline

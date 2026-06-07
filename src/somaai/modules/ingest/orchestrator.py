@@ -92,7 +92,7 @@ class IngestionOrchestrator:
 
         # Shared dependencies
         store = QdrantStore(self.settings)
-        chunker = SemanticChunker(max_chunk_size=1500)
+        chunker = SemanticChunker(max_chunk_size=self.settings.max_chunk_size)
 
         # Build ordered pipeline
         return [
@@ -169,9 +169,28 @@ class IngestionOrchestrator:
                 result = await stage.run(ctx)
 
                 if not result.success:
-                    raise IngestionError(
-                        f"Stage '{stage.name}' failed: {result.errors}"
+                    # Build detailed error message
+                    error_details = []
+                    if isinstance(result.errors, list):
+                        for err in result.errors:
+                            if isinstance(err, dict):
+                                severity = err.get("severity", "error")
+                                message = err.get("message", str(err))
+                                suggestion = err.get("suggestion", "")
+                                error_details.append(
+                                    f"[{severity.upper()}] {message}"
+                                    + (f" - {suggestion}" if suggestion else "")
+                                )
+                            else:
+                                error_details.append(str(err))
+                    else:
+                        error_details.append(str(result.errors))
+
+                    detailed_error = f"Stage '{stage.name}' failed:\n" + "\n".join(
+                        error_details
                     )
+                    logger.error(detailed_error)
+                    raise IngestionError(detailed_error)
 
                 # Check for skip signal (e.g., duplicate detected)
                 if result.should_skip:

@@ -30,11 +30,7 @@ async def lifespan(app: FastAPI):
             "Set REQUIRE_API_KEY=true for production deployments."
         )
 
-    # Pre-load embeddings model to avoid first-request latency
-    # Skip during tests — model download hangs test setup
-    import os
-
-    if not os.getenv("TESTING"):
+    if not settings.is_testing:
         get_embeddings_model(settings)
         # Use fallback_to_mock in debug mode to avoid startup crashes
         app.state.llm = get_llm(settings, fallback_to_mock=settings.debug)
@@ -78,6 +74,10 @@ def create_app() -> FastAPI:
     )
 
     setup_middleware(app)
+
+    # Add custom error handlers
+    _setup_error_handlers(app)
+
     app.include_router(health_router)
     app.include_router(api_router, prefix="/api")
 
@@ -91,3 +91,28 @@ def create_app() -> FastAPI:
             pass  # Optional dependency
 
     return app
+
+
+def _setup_error_handlers(app: FastAPI) -> None:
+    """Setup custom error handlers for the application."""
+    from fastapi.responses import JSONResponse
+    from starlette.requests import Request
+
+    # Rate limit error handler
+    try:
+        from slowapi.errors import RateLimitExceeded
+
+        @app.exception_handler(RateLimitExceeded)
+        async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+            """Custom handler for rate limit errors."""
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "detail": (
+                        "Too many requests. Please wait a moment before trying again. "
+                        "This helps us maintain quality service for all users."
+                    )
+                },
+            )
+    except ImportError:
+        pass  # slowapi not installed

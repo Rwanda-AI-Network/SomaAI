@@ -28,8 +28,12 @@ class PdfStructuredStrategy(BaseExtractionStrategy):
     def extract(self, file_stream, language: str = "eng") -> ExtractionResult:
         logger.info("Starting structured PDF extraction with pdfplumber.")
         try:
-            if hasattr(file_stream, "seek"):
-                file_stream.seek(0)
+            # Try to seek to beginning if possible (but don't fail if not seekable)
+            try:
+                if hasattr(file_stream, "seek"):
+                    file_stream.seek(0)
+            except OSError as e:
+                logger.debug(f"Stream not seekable, continuing anyway: {e}")
 
             # Read into memory for pdfplumber
             pdf_bytes = file_stream.read()

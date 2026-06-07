@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from somaai.contracts.common import GradeLevel, JobStatus, Subject
+from somaai.contracts.common import JobStatus
 
 ### This is not used yet ###
 # class IngestRequest(BaseModel):
@@ -27,8 +27,8 @@ class IngestStorageRequest(BaseModel):
     """
 
     storage_key: str = Field(..., description="Key of the object in storage")
-    grade: GradeLevel = Field(..., description="Grade level this document covers")
-    subject: Subject = Field(..., description="Subject this document covers")
+    grade: str = Field(..., description="Grade level this document covers")
+    subject: str = Field(..., description="Subject this document covers")
     title: str | None = Field(None, description="Optional document title")
 
 
@@ -53,8 +53,8 @@ class DocumentResponse(BaseModel):
     doc_id: str = Field(..., description="Unique document ID")
     filename: str = Field(..., description="Original filename")
     title: str = Field(..., description="Document title")
-    grade: GradeLevel = Field(..., description="Grade level")
-    subject: Subject = Field(..., description="Subject")
+    grade: str = Field(..., description="Grade level")
+    subject: str = Field(..., description="Subject")
     page_count: int = Field(..., description="Total number of pages")
     chunk_count: int = Field(..., description="Number of indexed chunks")
     status: str = Field(
@@ -63,7 +63,6 @@ class DocumentResponse(BaseModel):
     error_message: str | None = Field(
         None, description="Detailed error message if failed"
     )
-    storage_backend: str = Field(..., description="Storage backend (local/gdrive)")
     uploaded_at: datetime = Field(..., description="Upload timestamp")
     processed_at: datetime | None = Field(
         None, description="Processing completion timestamp"

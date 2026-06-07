@@ -7,7 +7,6 @@ Uses:
 
 from somaai.cache.config import CacheConfig, get_cache_config
 from somaai.cache.decorators import cached_embedding, cached_query, cached_retrieval
-from somaai.cache.session import SessionManager
 
 __all__ = [
     # Config
@@ -17,6 +16,4 @@ __all__ = [
     "cached_query",
     "cached_embedding",
     "cached_retrieval",
-    # Session
-    "SessionManager",
 ]

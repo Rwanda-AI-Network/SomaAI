@@ -1,53 +1,172 @@
 """Chat endpoint schemas."""
 
 from datetime import datetime
+from enum import Enum
 
 from pydantic import BaseModel, Field
 
-from somaai.contracts.common import GradeLevel, Subject, Sufficiency, UserRole
+from somaai.contracts.common import Sufficiency, UserRole
+
+# ── Enhancement feature flags ────────────────────────────────────
+
+
+class Enhancement(str, Enum):
+    """Pedagogical enhancements the LLM can add to its answer.
+
+    Pass a subset (or all) in ``Preferences.enabled_enhancements``.
+    Adding new enhancement types here is non-breaking for existing
+    clients — they simply won't receive the new field unless they
+    opt in.
+    """
+
+    ANALOGY = "analogy"
+    REAL_WORLD = "real_world"
 
 
 class Preferences(BaseModel):
-    enable_analogy: bool | None = Field(
-        default=None, description="Include analogy in response"
+    """Per-request pedagogical preferences.
+
+    ``enabled_enhancements=None`` means "use server defaults"
+    (role-based or teacher-profile-based).  Pass an explicit list
+    (including an empty list ``[]``) to override the defaults.
+    """
+
+    enabled_enhancements: list[Enhancement] | None = Field(
+        default=None,
+        description=(
+            "Enhancements to include in the response. "
+            "None = use server defaults. "
+            "[] = disable all enhancements."
+        ),
     )
-    enable_realworld: bool | None = Field(
-        default=None, description="Include real-world context"
+
+
+# ── Conversation contracts ───────────────────────────────────────
+
+
+class CreateConversationRequest(BaseModel):
+    """Request body for POST /api/v1/chat/conversations."""
+
+    grade: str = Field(..., description="Grade level (e.g. 'S1', 'P6')")
+    subject: str = Field(default="general", description="Subject (defaults to general)")
+    title: str | None = Field(
+        None, min_length=1, max_length=255, description="Initial conversation title"
     )
+
+    from pydantic import field_validator
+
+    @field_validator("title")
+    @classmethod
+    def title_must_not_be_whitespace(cls, v: str | None) -> str | None:
+        """Reject titles that are only whitespace."""
+        if v is not None and not v.strip():
+            raise ValueError("Title must not be whitespace only")
+        return v.strip() if v else v
+
+
+class UpdateConversationRequest(BaseModel):
+    """Request body for PATCH /api/v1/chat/conversations/{id}."""
+
+    title: str = Field(..., min_length=1, max_length=255, description="New title")
+
+    from pydantic import field_validator
+
+    @field_validator("title")
+    @classmethod
+    def title_must_not_be_whitespace(cls, v: str) -> str:
+        """Reject titles that are only whitespace."""
+        if not v.strip():
+            raise ValueError("Title must not be whitespace only")
+        return v.strip()
+
+
+class ConversationResponse(BaseModel):
+    """Single conversation in list/detail responses."""
+
+    id: str = Field(..., description="Conversation ID")
+    title: str = Field(..., description="Conversation title")
+    grade: str = Field(..., description="Grade level")
+    subject: str = Field(..., description="Subject")
+    message_count: int = Field(0, description="Number of messages")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime = Field(..., description="Last activity timestamp")
+
+
+class ConversationListResponse(BaseModel):
+    """Response for GET /api/v1/chat/conversations.
+
+    Cursor-paginated.  Pass ``next_cursor`` as the ``cursor`` query
+    parameter on the next request to retrieve the following page.
+    ``next_cursor=None`` means you have reached the last page.
+    """
+
+    conversations: list[ConversationResponse] = Field(
+        default_factory=list, description="Conversations in this page"
+    )
+    next_cursor: str | None = Field(
+        None,
+        description=(
+            "Opaque cursor for the next page. None indicates this is the last page."
+        ),
+    )
+
+
+# ── Chat request/response contracts ─────────────────────────────
 
 
 class ChatRequest(BaseModel):
-    """Request body for POST /api/v1/chat/ask.
+    """Request body for POST /api/v1/chat/conversations/{id}/ask.
 
-    Used by both students and teachers to ask questions.
+    ``grade`` and ``subject`` are intentionally absent — the server
+    resolves them from the parent ``Conversation`` row, which is the
+    single source of truth.  This prevents client-side drift where a
+    request could silently supply a different grade than the one the
+    conversation was created with.
     """
 
     question: str = Field(
         ..., min_length=1, max_length=2000, description="User's question"
     )
-    grade: GradeLevel = Field(..., description="Grade level for context")
-    subject: Subject = Field(..., description="Subject for context")
-    session_id: str | None = Field(
-        None, description="Conversation session ID for context"
-    )
+
+    from pydantic import field_validator
+
+    @field_validator("question")
+    @classmethod
+    def question_must_not_be_whitespace(cls, v: str) -> str:
+        """Reject questions that are only whitespace."""
+        if not v.strip():
+            raise ValueError("Question must not be empty or whitespace only")
+        return v.strip()
+
     user_role: UserRole = Field(default=UserRole.STUDENT, description="User role")
-    teaching_classes: list[GradeLevel] | None = Field(
-        None, description="Teaching classes for teachers only"
-    )
     preferences: Preferences = Field(
         default_factory=Preferences,
-        description="User preferences for context",
+        description="Per-request pedagogical preferences",
+    )
+
+
+class ResponseEnhancements(BaseModel):
+    """Optional pedagogical enrichments generated by the LLM.
+
+    Present only when the relevant enhancements are enabled via
+    ``Preferences.enabled_enhancements``.  Adding new fields here is
+    non-breaking — clients that don't know about a field ignore it.
+    """
+
+    analogy: str | None = Field(None, description="Analogy that explains the concept")
+    real_world_context: str | None = Field(
+        None, description="Real-world application of the concept"
     )
 
 
 class CitationResponse(BaseModel):
-    """Citation reference in a response.
-
-    Links response content to source documents.
-    """
+    """Citation reference in a response."""
 
     doc_id: str = Field(..., description="Source document ID")
     doc_title: str = Field(..., description="Document title/filename")
+    section_title: str | None = Field(
+        None, description="Section title from document structure"
+    )
     page_start: int = Field(..., ge=1, description="First page (1-indexed)")
     page_end: int = Field(..., ge=1, description="Last page (1-indexed)")
     chunk_preview: str = Field(
@@ -58,22 +177,28 @@ class CitationResponse(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    """Response body for POST /api/v1/chat/ask.
-
-    Contains the AI-generated answer with citations.
-    """
+    """Response body for POST /api/v1/chat/conversations/{id}/ask."""
 
     message_id: str = Field(..., description="Unique message ID for reference")
+    conversation_id: str = Field(
+        ..., description="Conversation this message belongs to"
+    )
     answer: str = Field(..., description="AI-generated answer")
     sufficiency: Sufficiency = Field(
         ..., description="Whether context was sufficient for answer"
     )
+    confidence: float = Field(
+        ..., ge=0, le=1, description="Model confidence in the answer"
+    )
     citations: list[CitationResponse] = Field(
         default_factory=list, description="Source citations"
     )
-    analogy: str | None = Field(None, description="Analogy explanation if enabled")
-    realworld_context: str | None = Field(
-        None, description="Real-world application if enabled"
+    enhancements: ResponseEnhancements | None = Field(
+        None,
+        description=(
+            "Optional pedagogical enrichments (analogy, real-world context, etc.). "
+            "Present only when enhancements were requested and generated."
+        ),
     )
     created_at: datetime = Field(..., description="Response timestamp")
 
@@ -81,24 +206,33 @@ class ChatResponse(BaseModel):
 class MessageResponse(BaseModel):
     """Full message details for GET /api/v1/chat/messages/{message_id}.
 
-    Includes complete message history and metadata.
+    Mirrors ``ChatResponse`` so both read paths expose the same shape.
     """
 
     message_id: str = Field(..., description="Unique message ID")
-    session_id: str | None = Field(
-        None, description="Session ID if part of conversation"
-    )
+    conversation_id: str = Field(..., description="Conversation ID")
+    grade: str = Field(..., description="Grade level (snapshot from conversation)")
+    subject: str = Field(..., description="Subject (snapshot from conversation)")
     user_role: UserRole = Field(..., description="Role of user who asked")
     question: str = Field(..., description="Original question")
     answer: str = Field(..., description="AI-generated answer")
     sufficiency: Sufficiency = Field(..., description="Whether context was sufficient")
-    grade: GradeLevel = Field(..., description="Grade level context")
-    subject: Subject = Field(..., description="Subject context")
+    confidence: float = Field(
+        ..., ge=0, le=1, description="Model confidence in the answer"
+    )
     citations: list[CitationResponse] = Field(
         default_factory=list, description="Source citations"
+    )
+    enhancements: ResponseEnhancements | None = Field(
+        None, description="Pedagogical enrichments, if any were generated"
     )
     created_at: datetime = Field(..., description="Message timestamp")
 
 
-#### issues:::
-# 1. created_at --- time should be kigali time utc()
+class MessageListResponse(BaseModel):
+    """Paginated list of messages in a conversation."""
+
+    messages: list[MessageResponse] = Field(
+        default_factory=list, description="Messages in this page"
+    )
+    next_cursor: str | None = Field(None, description="Opaque cursor for the next page")

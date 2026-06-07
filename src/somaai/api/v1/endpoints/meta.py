@@ -4,12 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from somaai.contracts.meta import (
-    GradeCreate,
-    GradeResponse,
-    GradeUpdate,
-    SubjectCreate,
-    SubjectResponse,
-    SubjectUpdate,
+    MetadataCreate,
+    MetadataResponse,
+    MetadataUpdate,
     TopicCreate,
     TopicResponse,
     TopicUpdate,
@@ -25,35 +22,79 @@ def _get_meta_service(db: AsyncSession = Depends(get_session)) -> MetaService:
     return MetaService(db)
 
 
-@router.get("/grades", response_model=list[GradeResponse])
-async def get_grades(
+# ---------------------------------------------------------------------------
+# Curriculum Metadata (grades + subjects)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/metadata", response_model=list[MetadataResponse])
+async def list_metadata(
+    type: str | None = Query(
+        None, description="Filter by type: 'grade' or 'subject'"
+    ),
     only_with_docs: bool = Query(
-        False, description="If True, only return grades with documents"
+        False, description="If True, only return entries with documents"
     ),
     service: MetaService = Depends(_get_meta_service),
 ):
-    """Get all available grade levels.
+    """List curriculum metadata entries.
 
-    Returns list of grades (P6, S1-S6) with display names and sort order.
+    Returns grades and/or subjects with display names and sort order.
+    Use ?type=grade or ?type=subject to filter.
     """
-    return await service.get_grades(only_with_docs=only_with_docs)
+    return await service.get_metadata(meta_type=type, only_with_docs=only_with_docs)
 
 
-@router.get("/subjects", response_model=list[SubjectResponse])
-async def get_subjects(
-    grade: str | None = Query(None, description="Filter by grade ID"),
-    only_with_docs: bool = Query(
-        False, description="If True, only return subjects with documents"
-    ),
+@router.post(
+    "/metadata", response_model=MetadataResponse, status_code=status.HTTP_201_CREATED
+)
+async def create_metadata(
+    data: MetadataCreate,
     service: MetaService = Depends(_get_meta_service),
 ):
-    """Get available subjects.
+    """Create a new curriculum metadata entry (grade or subject)."""
+    from somaai.exceptions import (
+        ConflictError,
+        ValidationError,
+        conflict_exception,
+        validation_exception,
+    )
 
-    Optionally filter by grade level. When filtered, returns only subjects
-    that have ingested documents for that grade. Returns all subjects if
-    no grade specified or no documents exist yet.
-    """
-    return await service.get_subjects(grade, only_with_docs=only_with_docs)
+    try:
+        return await service.create_metadata(data)
+    except ConflictError as e:
+        raise conflict_exception(detail=str(e))
+    except ValidationError as e:
+        raise validation_exception(detail=str(e))
+
+
+@router.patch("/metadata/{metadata_id}", response_model=MetadataResponse)
+async def update_metadata(
+    metadata_id: str,
+    data: MetadataUpdate,
+    service: MetaService = Depends(_get_meta_service),
+):
+    """Update an existing metadata entry."""
+    entry = await service.update_metadata(metadata_id, data)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Metadata entry not found")
+    return entry
+
+
+@router.delete("/metadata/{metadata_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_metadata(
+    metadata_id: str,
+    service: MetaService = Depends(_get_meta_service),
+):
+    """Delete a metadata entry."""
+    success = await service.delete_metadata(metadata_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Metadata entry not found")
+
+
+# ---------------------------------------------------------------------------
+# Topics
+# ---------------------------------------------------------------------------
 
 
 @router.get("/topics", response_model=list[TopicResponse])
@@ -70,81 +111,6 @@ async def get_topics(
     return await service.get_topics(grade, subject)
 
 
-# ---------------------------------------------------------------------------
-# Mutations
-# ---------------------------------------------------------------------------
-
-
-@router.post(
-    "/grades", response_model=GradeResponse, status_code=status.HTTP_201_CREATED
-)
-async def create_grade(
-    grade_in: GradeCreate,
-    service: MetaService = Depends(_get_meta_service),
-):
-    """Create a new grade level."""
-    return await service.create_grade(grade_in)
-
-
-@router.patch("/grades/{grade_id}", response_model=GradeResponse)
-async def update_grade(
-    grade_id: str,
-    grade_in: GradeUpdate,
-    service: MetaService = Depends(_get_meta_service),
-):
-    """Update an existing grade level."""
-    grade = await service.update_grade(grade_id, grade_in)
-    if not grade:
-        raise HTTPException(status_code=404, detail="Grade not found")
-    return grade
-
-
-@router.delete("/grades/{grade_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_grade(
-    grade_id: str,
-    service: MetaService = Depends(_get_meta_service),
-):
-    """Delete a grade level."""
-    success = await service.delete_grade(grade_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Grade not found")
-
-
-@router.post(
-    "/subjects", response_model=SubjectResponse, status_code=status.HTTP_201_CREATED
-)
-async def create_subject(
-    subject_in: SubjectCreate,
-    service: MetaService = Depends(_get_meta_service),
-):
-    """Create a new subject."""
-    return await service.create_subject(subject_in)
-
-
-@router.patch("/subjects/{subject_id}", response_model=SubjectResponse)
-async def update_subject(
-    subject_id: str,
-    subject_in: SubjectUpdate,
-    service: MetaService = Depends(_get_meta_service),
-):
-    """Update an existing subject."""
-    subject = await service.update_subject(subject_id, subject_in)
-    if not subject:
-        raise HTTPException(status_code=404, detail="Subject not found")
-    return subject
-
-
-@router.delete("/subjects/{subject_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_subject(
-    subject_id: str,
-    service: MetaService = Depends(_get_meta_service),
-):
-    """Delete a subject."""
-    success = await service.delete_subject(subject_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Subject not found")
-
-
 @router.post(
     "/topics", response_model=TopicResponse, status_code=status.HTTP_201_CREATED
 )
@@ -153,7 +119,19 @@ async def create_topic(
     service: MetaService = Depends(_get_meta_service),
 ):
     """Create a new topic."""
-    return await service.create_topic(topic_in)
+    from somaai.exceptions import (
+        ConflictError,
+        ValidationError,
+        conflict_exception,
+        validation_exception,
+    )
+
+    try:
+        return await service.create_topic(topic_in)
+    except ConflictError as e:
+        raise conflict_exception(detail=str(e))
+    except ValidationError as e:
+        raise validation_exception(detail=str(e))
 
 
 @router.patch("/topics/{topic_id}", response_model=TopicResponse)

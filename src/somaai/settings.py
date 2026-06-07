@@ -1,115 +1,176 @@
 """Application settings.
 
-Centralized configuration loaded from environment variables.
+Single source of truth for all configuration. Uses pydantic-settings
+to load from environment variables with the ``SOMAAI_`` prefix.
+
+Environment variable format::
+
+    SOMAAI_{FIELD_NAME}
+
+Examples::
+
+    SOMAAI_ENV=dev
+    SOMAAI_DATABASE_URL=postgresql+asyncpg://user:pass@host/db
+    SOMAAI_GROQ_API_KEY=gsk_...
 """
 
-from pydantic import (
-    AliasChoices,
-    Field,
-    SecretStr,
-)
+import logging
+from enum import Enum
+
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
+
+
+class AppEnv(str, Enum):
+    """Application environment."""
+
+    DEVELOPMENT = "dev"
+    TESTING = "test"
+    PRODUCTION = "prod"
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment."""
+    """Flat application settings.
+
+    Every field maps directly to ``SOMAAI_{FIELD_NAME}``.
+    """
 
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
         env_prefix="SOMAAI_",
+        case_sensitive=False,
     )
 
-    # Application
+    # Core
+    env: AppEnv = AppEnv.DEVELOPMENT
     app_name: str = "SomaAI"
-    version: str = "0.1.0"
     debug: bool = False
     host: str = "0.0.0.0"
     port: int = 8000
+    version: str = "0.1.0"
 
     # Database
     database_url: str = Field(
         default="sqlite+aiosqlite:///./somaai.db",
-        validation_alias=AliasChoices("SOMAAI_DATABASE_URL", "DATABASE_URL"),
+        description="PostgreSQL for prod, SQLite for dev",
     )
     db_pool_size: int = 10
     db_max_overflow: int = 20
     db_pool_timeout: int = 30
+    db_echo_sql: bool = False
 
-    # Redis / Cache
-    redis_url: str = Field(
-        default="redis://localhost:6379/0",
-        validation_alias=AliasChoices("SOMAAI_REDIS_URL", "REDIS_URL"),
-    )
-    redis_jobs_url: str = Field(
-        default="redis://localhost:6379/1",
-        validation_alias=AliasChoices("SOMAAI_REDIS_JOBS_URL", "REDIS_JOBS_URL"),
-    )
-    redis_cache_url: str = Field(
-        default="redis://localhost:6379/2",
-        validation_alias=AliasChoices("SOMAAI_REDIS_CACHE_URL", "REDIS_CACHE_URL"),
-    )
+    # Redis
+    redis_url: str = "redis://localhost:6379/0"
+    redis_jobs_url: str = "redis://localhost:6379/1"
+    redis_cache_url: str = "redis://localhost:6379/2"
     redis_password: SecretStr | None = None
 
-    # Vector Database (Qdrant)
-    qdrant_url: str = Field(
-        default="http://localhost:6333",
-        validation_alias=AliasChoices("SOMAAI_QDRANT_URL", "QDRANT_URL"),
-    )
+    # Vector DB (Qdrant)
+    qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: SecretStr | None = None
-    qdrant_collection_name: str = "somaai_documents"
+    qdrant_collection: str = "somaai_documents"
 
-    # Storage
-    storage_backend: str = "minio"  # minio | s3
-
-    # Ingestion Limits
-    max_ingest_file_size: int = 100 * 1024 * 1024  # 100MB
-    ingest_validation_threshold: int = 10 * 1024 * 1024  # 10MB
-
-    # MinIO (Development)
+    # Storage (MinIO)
+    storage_backend: str = "minio"
     minio_endpoint: str = "localhost:9000"
     minio_access_key: str = "minioadmin"
     minio_secret_key: SecretStr = SecretStr("minioadmin")
     minio_bucket: str = "somaai-documents"
     minio_secure: bool = False
 
-    # S3 (Production)
-    s3_bucket: str = ""
-    s3_region: str = "us-east-1"
-    s3_access_key: str | None = None
-    s3_secret_key: SecretStr | None = None
-    s3_endpoint_url: str | None = None
+    # LLM
+    llm_backend: str = "groq"
+    groq_api_key: SecretStr | None = ""
+    groq_model: str = "llama-3.3-70b-versatile" # openai/gpt-oss-120b
+    gemini_api_key: SecretStr | None = None
+    gemini_model: str = "gemini-1.5-flash"
 
-    # Background Jobs
-    queue_backend: str = "redis"  # redis | sync
+    # Ingestion
+    max_file_size: int = 100 * 1024 * 1024  # 100 MB
+    ingest_validation_threshold: int = 1 * 1024 * 1024  # 1 MB
+    max_chunk_size: int = 1500
 
-    # Cache TTLs (seconds)
-    cache_query_ttl: int = 86400
-    cache_embedding_ttl: int = 3600
+    # Cache
+    cache_query_ttl: int = 86400  # 24 h
+    cache_embedding_ttl: int = 3600  # 1 h
     cache_retrieval_ttl: int = 3600
     cache_session_ttl: int = 3600
-
-    # RAG Settings
-    rag_enable_input_validation: bool = True
-
-    # Monitoring
-    enable_metrics: bool = Field(
-        default=True,
-        validation_alias=AliasChoices("SOMAAI_ENABLE_METRICS", "ENABLE_METRICS"),
-    )
-
-    # LLM Backend
-    llm_backend: str = "groq"
-    groq_api_key: SecretStr | None = None
-    groq_model: str = "llama3.2"
-    huggingface_api_key: SecretStr | None = None
-    huggingface_model: str = ""
-    openai_api_key: SecretStr | None = None
-    openai_model: str = ""
+    cache_semantic_enabled: bool = True
+    cache_similarity_threshold: float = 0.92
+    cache_embedding_dimension: int = 768
+    cache_namespace: str = "somaai"
 
     # Security
-    require_api_key: bool = False  # Enable in production
+    require_api_key: bool = False
+    rate_limit_ask: str = "20/hour"
+    rate_limit_create_conversation: str = "50/hour"
+    session_cookie_secure: bool = False
+    session_ttl_days: int = 90
+    rag_enable_input_validation: bool = True
+    rag_enable_hybrid_search: bool = True
+
+    # Monitoring
+    enable_metrics: bool = True
+
+    # Derived helpers (not env vars)
+    @property
+    def is_production(self) -> bool:
+        return self.env == AppEnv.PRODUCTION
+
+    @property
+    def is_testing(self) -> bool:
+        return self.env == AppEnv.TESTING
+
+    @property
+    def is_sqlite(self) -> bool:
+        return self.database_url.startswith("sqlite")
+
+    @property
+    def queue_backend(self) -> str:
+        """Tests always use sync; everything else uses redis."""
+        return "sync" if self.is_testing else "redis"
+
+    # Validation
+
+    @model_validator(mode="after")
+    def _validate(self) -> "Settings":
+        if self.is_production:
+            if self.is_sqlite:
+                raise ValueError(
+                    "SQLite is not allowed in production. "
+                    "Set SOMAAI_DATABASE_URL to a PostgreSQL URL."
+                )
+            if not self.require_api_key:
+                logger.warning(
+                    "⚠️  SOMAAI_REQUIRE_API_KEY is False in production — "
+                    "this is a security risk."
+                )
+            if not self.session_cookie_secure:
+                logger.warning(
+                    "⚠️  SOMAAI_SESSION_COOKIE_SECURE is False in production — "
+                    "cookies will be sent over HTTP."
+                )
+
+        if self.debug:
+            db_host = (
+                self.database_url.split("@")[-1]
+                if "@" in self.database_url
+                else "sqlite"
+            )
+            logger.info(
+                "Config [%s] DB=%s Debug=%s LLM=%s Storage=%s",
+                self.env.value,
+                db_host,
+                self.debug,
+                self.llm_backend,
+                self.storage_backend,
+            )
+
+        return self
 
 
 settings = Settings()

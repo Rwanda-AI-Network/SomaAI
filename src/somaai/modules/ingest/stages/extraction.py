@@ -271,26 +271,74 @@ class ExtractionStage(PipelineStage):
         return self._extractor
 
     async def execute(self, ctx: PipelineContext) -> StageResult:
-        """Extract and sanitize document.
+        """Extract and sanitize document with production-grade streaming.
 
         Flow:
-        1. Extract with text_extractor (handles OCR fallback internally)
-        2. Sanitize result (encoding, whitespace, artifacts)
-        3. Validate quality
-        4. Store in context
+        1. Get file stream (from MinIO storage or local source)
+        2. Write to temp file for extractor compatibility
+        3. Extract with text_extractor
+        4. Sanitize result
+        5. Validate quality
+        6. Store in context
+        7. Automatic cleanup
         """
         self._report_progress(ctx, "Extracting document", 0.1)
 
-        try:
-            # STEP 1: Extract using text_extractor
-            # text_extractor handles: strategy selection, OCR fallback
-            # Run in thread pool to avoid blocking event loop
-            # Priority: stream > content > path
-            input_data = ctx.file_stream or ctx.file_content or ctx.file_path
+        import tempfile
 
+        temp_path = None
+
+        try:
+            # STEP 1: Get file data and write to temp file
+            if ctx.storage_key:
+                # MinIO — use existing storage provider
+                from somaai.providers.storage import get_storage
+
+                storage = get_storage()
+                async with storage.open(ctx.storage_key) as stream:
+                    file_data = stream.read()
+
+                # Write to temp file for extractor compatibility
+                suffix = Path(ctx.storage_key).suffix or ".pdf"
+                with tempfile.NamedTemporaryFile(
+                    delete=False, suffix=suffix
+                ) as tmp:
+                    tmp.write(file_data)
+                    temp_path = Path(tmp.name)
+
+                logger.info(
+                    f"[{ctx.doc_id}] Read {len(file_data)} bytes from "
+                    f"MinIO key: {ctx.storage_key}"
+                )
+
+            elif ctx.file_content:
+                # Bytes in memory — write to temp file
+                suffix = Path(str(ctx.file_path)).suffix or ".pdf"
+                with tempfile.NamedTemporaryFile(
+                    delete=False, suffix=suffix
+                ) as tmp:
+                    tmp.write(ctx.file_content)
+                    temp_path = Path(tmp.name)
+
+            elif ctx.file_stream:
+                # Existing stream — read and write to temp file
+                data = await asyncio.to_thread(ctx.file_stream.read)
+                suffix = Path(str(ctx.file_path)).suffix or ".pdf"
+                with tempfile.NamedTemporaryFile(
+                    delete=False, suffix=suffix
+                ) as tmp:
+                    tmp.write(data)
+                    temp_path = Path(tmp.name)
+
+            else:
+                # Local file — use directly
+                temp_path = ctx.file_path
+
+            # STEP 2: Extract using text_extractor
+            self._report_progress(ctx, "Running text extraction", 0.3)
             raw_result = await asyncio.to_thread(
                 self.extractor,
-                input_data=input_data,
+                input_data=temp_path,
                 ocr_mode=ctx.ocr_mode,
                 language=ctx.language,
             )
@@ -308,9 +356,25 @@ class ExtractionStage(PipelineStage):
                 self.validator.validate, sanitized_result
             )
 
+            # Always log issues (warnings and errors)
+            validation.log_issues()
+
             if not validation.passed:
-                validation.log_issues()
-                raise ExtractionValidationError(validation.issues)
+                # Convert ValidationIssue objects to dicts for better error messages
+                issue_dicts = []
+                for issue in validation.issues:
+                    if hasattr(issue, "to_dict"):
+                        issue_dicts.append(issue.to_dict())
+                    else:
+                        issue_dicts.append(
+                            {
+                                "severity": getattr(issue, "severity", "error"),
+                                "message": getattr(issue, "message", str(issue)),
+                                "suggestion": getattr(issue, "suggestion", ""),
+                            }
+                        )
+
+                raise ExtractionValidationError(issue_dicts)
 
             validation.log_issues()  # Log warnings
 
@@ -339,6 +403,17 @@ class ExtractionStage(PipelineStage):
             raise ExtractionValidationError(
                 [{"severity": "critical", "message": f"Extraction failed: {e}"}]
             )
+
+        finally:
+            # Clean up temp file (but not original local files)
+            if temp_path and temp_path != ctx.file_path and temp_path.exists():
+                try:
+                    temp_path.unlink()
+                    logger.debug(f"[{ctx.doc_id}] Cleaned up temp file: {temp_path}")
+                except Exception as e:
+                    logger.warning(
+                        f"[{ctx.doc_id}] Failed to clean up temp file: {e}"
+                    )
 
     def _log_extraction_summary(self, ctx: PipelineContext) -> None:
         """Log extraction results for monitoring."""

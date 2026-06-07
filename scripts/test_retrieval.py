@@ -106,11 +106,11 @@ async def test_retrieval(
         print(f"{'─' * 60}")
         print(f"  [{i + 1}] {quality} Score: {score:.4f}")
         print(f"      Title: {metadata.get('title', 'Unknown')}")
-        grade_val = metadata.get('grade', '?')
-        subj_val = metadata.get('subject', '?')
+        grade_val = metadata.get("grade", "?")
+        subj_val = metadata.get("subject", "?")
         print(f"      Grade: {grade_val} | Subject: {subj_val}")
-        p_start = metadata.get('page_start', '?')
-        p_end = metadata.get('page_end', '?')
+        p_start = metadata.get("page_start", "?")
+        p_end = metadata.get("page_end", "?")
         print(f"      Pages: {p_start}-{p_end}")
         if metadata.get("section_title"):
             print(f"      Section: {metadata['section_title']}")
@@ -151,7 +151,9 @@ Examples:
     parser.add_argument("--grade", default="S1", help="Grade level (default: S1)")
     parser.add_argument("--subject", default=None, help="Subject filter (optional)")
     parser.add_argument(
-        "--top-k", type=int, default=5,
+        "--top-k",
+        type=int,
+        default=5,
         help="Number of results (default: 5)",
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")

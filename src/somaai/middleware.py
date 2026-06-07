@@ -5,19 +5,31 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from somaai.settings import settings
+
 logger = logging.getLogger(__name__)
 
 
 def setup_middleware(app: FastAPI) -> None:
     """Set up application middleware."""
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origin_regex=".*",
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # Handle CORS with an architectural decision for development vs production:
+    # If allow_origins contains "*", we use allow_origin_regex to support credentials.
+    cors_params = {
+        "allow_credentials": True,
+        "allow_methods": ["*"],
+        "allow_headers": ["*"],
+    }
+
+    if "*" in settings.cors_allowed_origins:
+        # Standard FastAPI/Starlette CORSMiddleware doesn't allow "*" with allow_credentials=True.
+        # We use a broad regex but explicitly allow local origins for Swagger/tools.
+        cors_params["allow_origin_regex"] = "https?://(localhost|127\.0\.0\.1)(:[0-9]+)?.*"
+        cors_params["allow_origins"] = ["http://localhost", "http://localhost:8000", "http://127.0.0.1:8000"]
+    else:
+        cors_params["allow_origins"] = settings.cors_allowed_origins
+
+    app.add_middleware(CORSMiddleware, **cors_params)
 
     # Rate limiting with slowapi (Redis-backed for horizontal scaling)
     try:
@@ -32,8 +44,6 @@ def setup_middleware(app: FastAPI) -> None:
 
             if os.getenv("TESTING"):
                 raise ImportError("Skip Redis in tests")
-
-            from somaai.settings import settings
 
             # Redis-backed storage for horizontal scaling
             limiter = Limiter(

@@ -10,10 +10,12 @@ class CacheConfig:
 
     # Redis configuration
     redis_url: str = field(
-        default_factory=lambda: os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        default_factory=lambda: os.getenv(
+            "SOMAAI_REDIS_CACHE_URL", "redis://localhost:6379/2"
+        )
     )
     redis_password: str | None = field(
-        default_factory=lambda: os.getenv("REDIS_PASSWORD")
+        default_factory=lambda: os.getenv("SOMAAI_REDIS_PASSWORD")
     )
 
     # TTL defaults (in seconds)
@@ -48,32 +50,33 @@ class CacheConfig:
                 embedding_ttl=main_settings.cache_embedding_ttl,
                 retrieval_ttl=main_settings.cache_retrieval_ttl,
                 session_ttl=main_settings.cache_session_ttl,
-                semantic_enabled=(
-                    os.getenv("CACHE_SEMANTIC_ENABLED", "true").lower() == "true"
-                ),
-                similarity_threshold=float(
-                    os.getenv("CACHE_SIMILARITY_THRESHOLD", "0.92")
-                ),
-                embedding_dimension=int(os.getenv("CACHE_EMBEDDING_DIM", "768")),
-                namespace=os.getenv("CACHE_NAMESPACE", "somaai"),
+                semantic_enabled=main_settings.cache_semantic_enabled,
+                similarity_threshold=main_settings.cache_similarity_threshold,
+                embedding_dimension=main_settings.cache_embedding_dimension,
+                namespace=main_settings.cache_namespace,
             )
-        except ImportError:
+        except (ImportError, AttributeError):
             # Fallback to environment variables
             return cls(
-                redis_url=os.getenv("REDIS_CACHE_URL", "redis://localhost:6379/2"),
-                redis_password=os.getenv("REDIS_PASSWORD"),
-                query_ttl=int(os.getenv("CACHE_QUERY_TTL", "86400")),
-                embedding_ttl=int(os.getenv("CACHE_EMBEDDING_TTL", "3600")),
-                retrieval_ttl=int(os.getenv("CACHE_RETRIEVAL_TTL", "3600")),
-                session_ttl=int(os.getenv("CACHE_SESSION_TTL", "3600")),
+                redis_url=os.getenv(
+                    "SOMAAI_REDIS_CACHE_URL", "redis://localhost:6379/2"
+                ),
+                redis_password=os.getenv("SOMAAI_REDIS_PASSWORD"),
+                query_ttl=int(os.getenv("SOMAAI_CACHE_QUERY_TTL", "86400")),
+                embedding_ttl=int(os.getenv("SOMAAI_CACHE_EMBEDDING_TTL", "3600")),
+                retrieval_ttl=int(os.getenv("SOMAAI_CACHE_RETRIEVAL_TTL", "3600")),
+                session_ttl=int(os.getenv("SOMAAI_CACHE_SESSION_TTL", "3600")),
                 semantic_enabled=(
-                    os.getenv("CACHE_SEMANTIC_ENABLED", "true").lower() == "true"
+                    os.getenv("SOMAAI_CACHE_SEMANTIC_ENABLED", "true").lower()
+                    == "true"
                 ),
                 similarity_threshold=float(
-                    os.getenv("CACHE_SIMILARITY_THRESHOLD", "0.92")
+                    os.getenv("SOMAAI_CACHE_SIMILARITY_THRESHOLD", "0.92")
                 ),
-                embedding_dimension=int(os.getenv("CACHE_EMBEDDING_DIM", "768")),
-                namespace=os.getenv("CACHE_NAMESPACE", "somaai"),
+                embedding_dimension=int(
+                    os.getenv("SOMAAI_CACHE_EMBEDDING_DIM", "768")
+                ),
+                namespace=os.getenv("SOMAAI_CACHE_NAMESPACE", "somaai"),
             )
 
 
