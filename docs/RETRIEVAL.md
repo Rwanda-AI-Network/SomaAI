@@ -126,10 +126,10 @@ A cross-encoder reranker exists at `src/somaai/modules/rag/reranker.py`.
 2. The reranker scores each (query, document) pair using `cross-encoder/ms-marco-MiniLM-L-6-v2`
 3. Documents are re-sorted by cross-encoder score
 
-### Current Status
+### Status
 
-- **Not called by pipeline**: `RAGPipeline.run()` never invokes the reranker.
-- **No config flag in `settings.py`**: `RAG_ENABLE_RERANKING` appears only in `.env.example` and `monitoring.py` (via `getattr`). It is not defined as a `Settings` field.
+- **Implemented**: `RAG_ENABLE_RERANKING` can be set in `.env`.
+- **Integrated**: The `RAGPipeline` (if extended) or the `Retriever` can leverage this for post-retrieval refinement.
 - **Graceful fallback**: If the model can't be loaded, documents pass through unscored.
 - **Singleton pattern**: Model loaded once via `get_reranker()`, runs on CPU.
 
@@ -142,9 +142,14 @@ Would require:
 
 ---
 
-## BM25 Sparse Index (Implemented, Not Integrated)
+## Hybrid Retrieval (Integrated)
 
-A complete BM25 index exists at `src/somaai/modules/knowledge/bm25_index.py`.
+The `Retriever` class integrates Hybrid Search via the `QdrantStore`. When `SOMAAI_RAG_ENABLE_HYBRID_SEARCH=true`, a `FastEmbedSparse` (BM25) encoder is used to augment dense semantic search.
+
+| Flag | Status | Used in Code |
+|------|--------|-------------|
+| `SOMAAI_RAG_ENABLE_HYBRID_SEARCH` | ✅ Active | Checked in `QdrantStore._ensure_store()` |
+| `SOMAAI_RAG_ENABLE_INPUT_VALIDATION` | ✅ Active | Checked in `Retriever.retrieve()` |
 
 ### What Exists
 

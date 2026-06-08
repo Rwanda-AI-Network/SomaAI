@@ -297,9 +297,7 @@ Prometheus metrics are optional — if `prometheus_client` is not installed, no-
 
 | Limitation | Details |
 |------------|---------|
-| **BM25 not integrated** | `BM25Index` exists with full persistence and deferred rebuild, but is never called from `Retriever`. Config flags (`RAG_ENABLE_HYBRID_SEARCH`, `RAG_HYBRID_ALPHA`) exist in `.env.example` but are **not defined in `settings.py`** and not checked by any pipeline code. |
-| **Reranker not active** | Cross-encoder reranker is implemented but `RAG_ENABLE_RERANKING` is not a defined setting — only accessed via `getattr` in monitoring. The pipeline never calls the reranker. |
-| **HyDE not implemented** | `RAG_ENABLE_HYDE` appears in `.env.example` and monitoring but there is no HyDE implementation in the RAG pipeline code. |
+| **HyDE not implemented** | `SOMAAI_RAG_ENABLE_HYDE` appears in monitoring but there is no HyDE implementation in the RAG pipeline code yet. |
 | **Subject filter disabled** | `Retriever.retrieve()` hardcodes `subject=None` (line 110 of `retriever.py`). Only grade filtering is active. |
 | **OpenAI/HuggingFace LLM stubs** | Both providers raise `NotImplementedError`. Only `groq` and `mock` backends are functional. |
 | **No evaluation metrics** | No Recall@K, MRR, or ground-truth dataset exists. |
