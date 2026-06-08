@@ -14,9 +14,8 @@ DB_HOST=${DB_HOST_PORT%:*}
 DB_PORT=${DB_HOST_PORT#*:}
 if [ "$DB_HOST" == "$DB_HOST_PORT" ]; then DB_PORT=5432; fi
 
-until curl -s http://$DB_HOST:$DB_PORT > /dev/null 2>&1 || [ $? -eq 52 ]; do
-  # pg_isready is better if available, but let's just attempt a connection
-  echo "Database is unavailable - sleeping"
+until (echo > /dev/tcp/$DB_HOST/$DB_PORT) >/dev/null 2>&1; do
+  echo "Database at $DB_HOST:$DB_PORT is unavailable - sleeping"
   sleep 1
 done
 

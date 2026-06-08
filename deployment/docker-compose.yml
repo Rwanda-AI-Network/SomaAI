@@ -61,6 +61,8 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+    healthcheck:
+      disable: true
     networks:
       - somaai-network
     deploy:

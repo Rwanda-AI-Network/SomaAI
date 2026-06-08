@@ -223,11 +223,14 @@ class QdrantStore(VectorStore):
                     )
                 else:
                     logger.warning(
-                        "Installed langchain-qdrant does not support sparse_embedding or sparse_encoder. "
+                        "Installed langchain-qdrant does not support "
+                        "sparse_embedding or sparse_encoder. "
                         "Falling back to dense-only search."
                     )
             except Exception as e:
-                logger.warning(f"Metadata inspection for sparse_encoder failed: {e}")
+                logger.warning(
+                    f"Metadata inspection for sparse_encoder failed: {e}"
+                )
 
         self._store = QdrantVectorStore(**store_kwargs)
         return self._store

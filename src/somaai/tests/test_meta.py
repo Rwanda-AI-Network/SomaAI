@@ -253,7 +253,9 @@ class TestGetSubjects:
         _run(_seed_subjects())
         _run(_seed_document("S2", "science"))
 
-        data = client.get("/api/v1/meta/metadata?type=subject&only_with_docs=true").json()
+        data = client.get(
+            "/api/v1/meta/metadata?type=subject&only_with_docs=true"
+        ).json()
         ids = [s["id"] for s in data]
         assert "science" in ids
 
@@ -271,7 +273,9 @@ class TestGetSubjects:
         _run(_seed_document("S2", "science"))  # Duplicate subject
         _run(_seed_document("S2", "mathematics"))
 
-        data = client.get("/api/v1/meta/metadata?type=subject&only_with_docs=true").json()
+        data = client.get(
+            "/api/v1/meta/metadata?type=subject&only_with_docs=true"
+        ).json()
         ids = [s["id"] for s in data]
         assert "science" in ids
         assert "mathematics" in ids

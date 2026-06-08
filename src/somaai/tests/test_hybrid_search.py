@@ -45,7 +45,10 @@ class TestHybridSearch(unittest.IsolatedAsyncioTestCase):
         ])
 
         with (
-            patch("somaai.modules.knowledge.stores.qdrant.get_embeddings", return_value=mock_embeddings),
+            patch(
+                "somaai.modules.knowledge.stores.qdrant.get_embeddings",
+                return_value=mock_embeddings,
+            ),
             patch("inspect.signature", return_value=mock_sig)
         ):
             await self.store._ensure_store()
@@ -78,7 +81,10 @@ class TestHybridSearch(unittest.IsolatedAsyncioTestCase):
         ])
 
         with (
-            patch("somaai.modules.knowledge.stores.qdrant.get_embeddings", return_value=mock_embeddings),
+            patch(
+                "somaai.modules.knowledge.stores.qdrant.get_embeddings",
+                return_value=mock_embeddings,
+            ),
             patch("inspect.signature", return_value=mock_sig)
         ):
             await self.store._ensure_store()

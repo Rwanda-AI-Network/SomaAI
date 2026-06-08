@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 try:
     from langchain_core.embeddings import Embeddings as _EmbeddingsBase
 except ImportError:
-    _EmbeddingsBase = object  # type: ignore[assignment,misc]
+    _EmbeddingsBase = object
 
 if TYPE_CHECKING:
     # Ensure static analysis sees a single concrete type

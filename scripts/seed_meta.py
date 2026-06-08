@@ -1,8 +1,6 @@
 import asyncio
 import logging
 
-from sqlalchemy import select
-
 from somaai.db.models import CurriculumMetadata
 from somaai.db.session import async_session_maker
 

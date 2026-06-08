@@ -25,7 +25,8 @@ async def lifespan(app: FastAPI):
         # In tests, we still use create_all for speed (with aiosqlite memory)
         await init_db()
     else:
-        # In production/dev, we assume migrations were run by the init container/make dev
+        # In production/dev, we assume migrations were run by the
+        # init container or via 'make dev'.
         # But we still initialize the embedding singleton
         startup_logger.info("Application starting in %s mode", settings.env.value)
 
@@ -45,6 +46,14 @@ async def lifespan(app: FastAPI):
         from somaai.providers.llm import MockLLMProvider
 
         app.state.llm = MockLLMProvider()
+
+    # Initialize API keys
+    if settings.api_keys:
+        from somaai.api.security import get_api_key_auth
+        auth = get_api_key_auth()
+        for key in settings.api_keys:
+            auth.add_key(key, {"user": "default_user", "mode": settings.env.value})
+        startup_logger.info("Initialized %d API keys", len(settings.api_keys))
 
     # Initialize Prometheus metrics (gated by enable_metrics setting)
     if settings.enable_metrics:

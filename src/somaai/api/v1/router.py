@@ -4,8 +4,8 @@ Aggregates all v1 endpoint routers.
 """
 
 from fastapi import APIRouter, Depends
-from somaai.api.security import verify_api_key
 
+from somaai.api.security import verify_api_key
 from somaai.api.v1.endpoints import (
     actors,
     chat,

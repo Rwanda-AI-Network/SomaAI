@@ -15,12 +15,12 @@ class TestGeminiProvider(unittest.IsolatedAsyncioTestCase):
         self.patcher = patch("google.genai.Client", autospec=True)
         self.mock_client_class = self.patcher.start()
         self.mock_client = self.mock_client_class.return_value
-        
+
         # Setup nested mocks for aio and models
         self.mock_client.aio = MagicMock()
         self.mock_client.aio.models = MagicMock()
         self.mock_client.aio.models.generate_content = AsyncMock()
-        
+
         self.mock_client.models = MagicMock()
         self.mock_client.models.embed_content = MagicMock()
 
@@ -66,7 +66,7 @@ class TestGeminiProvider(unittest.IsolatedAsyncioTestCase):
         """Verify embed calls client.models.embed_content correctly."""
         mock_embedding = MagicMock()
         mock_embedding.values = [0.1] * 768
-        
+
         mock_response = MagicMock()
         mock_response.embeddings = [mock_embedding]
         self.mock_client.models.embed_content.return_value = mock_response

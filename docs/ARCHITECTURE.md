@@ -298,7 +298,6 @@ Prometheus metrics are optional — if `prometheus_client` is not installed, no-
 | Limitation | Details |
 |------------|---------|
 | **HyDE not implemented** | `SOMAAI_RAG_ENABLE_HYDE` appears in monitoring but there is no HyDE implementation in the RAG pipeline code yet. |
-| **Subject filter disabled** | `Retriever.retrieve()` hardcodes `subject=None` (line 110 of `retriever.py`). Only grade filtering is active. |
 | **OpenAI/HuggingFace LLM stubs** | Both providers raise `NotImplementedError`. Only `groq` and `mock` backends are functional. |
 | **No evaluation metrics** | No Recall@K, MRR, or ground-truth dataset exists. |
 | **Mock LLM restricted** | `factory.py` blocks `LLM_BACKEND=mock` unless `TESTING=1` is set. |

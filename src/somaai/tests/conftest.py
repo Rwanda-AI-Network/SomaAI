@@ -9,7 +9,6 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-
 # Defer imports that trigger DB initialization until after environment is set.
 # from somaai.app import create_app  <-- DO NOT IMPORT HERE
 
@@ -25,7 +24,7 @@ def pytest_configure(config):
 async def cleanup_system_resources():
     """Dispose of global resources (DB engine, Qdrant client) after all tests."""
     yield
-    
+
     # 1. Dispose of SQLAlchemy engine
     try:
         from somaai.db.session import engine
@@ -175,7 +174,6 @@ def client():
     app = create_app()
 
     def get_test_settings():
-        from somaai.settings import Settings
 
         return Settings(llm_backend="mock")
 

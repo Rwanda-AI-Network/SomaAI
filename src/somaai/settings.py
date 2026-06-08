@@ -115,6 +115,7 @@ class Settings(BaseSettings):
 
     # Security
     require_api_key: bool = False
+    api_keys: list[str] = []
     rate_limit_ask: str = "20/hour"
     rate_limit_create_conversation: str = "50/hour"
     session_cookie_secure: bool = False
@@ -147,6 +148,25 @@ class Settings(BaseSettings):
 
     # Validation
 
+    @model_validator(mode="before")
+    @classmethod
+    def _parse_list_fields(cls, data: dict) -> dict:
+        """Robustly parse list fields from JSON array or comma-separated string."""
+        for field in ["api_keys", "cors_allowed_origins"]:
+            val = data.get(field)
+            if isinstance(val, str):
+                import json
+
+                try:
+                    data[field] = json.loads(val)
+                except (json.JSONDecodeError, TypeError):
+                    data[field] = [
+                        item.strip()
+                        for item in val.split(",")
+                        if item.strip()
+                    ]
+        return data
+
     @model_validator(mode="after")
     def _validate(self) -> "Settings":
         if self.is_testing:
@@ -177,9 +197,10 @@ class Settings(BaseSettings):
             if self.storage_backend == "minio":
                 if self.minio_access_key == "minioadmin":
                     raise ValueError(
-                        "Insecure default MinIO credentials ('minioadmin') are prohibited in production. "
-                        "Set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD for the minio service, "
-                        "and SOMAAI_MINIO_ACCESS_KEY/SOMAAI_MINIO_SECRET_KEY for the app."
+                        "Insecure default MinIO credentials ('minioadmin') are "
+                        "prohibited in production. Set MINIO_ROOT_USER and "
+                        "MINIO_ROOT_PASSWORD for the minio service, and "
+                        "SOMAAI_MINIO_ACCESS_KEY/SOMAAI_MINIO_SECRET_KEY for the app."
                     )
 
         if self.debug:

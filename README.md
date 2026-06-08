@@ -46,8 +46,9 @@ graph TD
 ### Architectural Design Decisions
 - **Async First**: Built entirely on `FastAPI` and `SQLAlchemy` async for high concurrency.
 - **Fail-Safe Caching**: Redis-backed caching for embeddings and LLM responses with automatic fallback to bypass-mode if Redis is unreachable.
-- **Background Processing**: Heavy lifting (PDF extraction, OCR, embedding) is offloaded to a dedicated ARQ worker to keep the API responsive.
 - **Production Readiness**: Hardened for VPS deployment with structured logging, deep health checks, and Prometheus metrics.
+- **One-Shot Initialization**: Dedicated ephemeral `init-db` service ensures migrations and seeding complete exactly once before the API starts.
+- **Configurable Security**: API access is secured via `SOMAAI_API_KEYS`, supporting rotation and multiple client keys.
 
 ---
 
@@ -61,7 +62,7 @@ git clone https://github.com/Rwanda-AI-Network/SomaAI.git
 cd SomaAI
 cp deployment/.env.example .env
 
-# 2. Configure GROQ_API_KEY in .env
+# 2. Configure GROQ_API_KEY and SOMAAI_API_KEYS in .env
 
 # 3. Development Mode
 make install

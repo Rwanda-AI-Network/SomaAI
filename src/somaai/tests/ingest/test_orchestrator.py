@@ -12,7 +12,6 @@ async def test_ingestion_orchestrator_flow():
     """Verify end-to-end ingestion orchestration using mocks."""
 
     # 1. Setup Environment
-    from somaai.settings import Settings
 
     settings = Settings(llm_backend="mock")
 

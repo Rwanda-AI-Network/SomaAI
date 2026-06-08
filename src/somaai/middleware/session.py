@@ -65,7 +65,9 @@ class SessionMiddleware(BaseHTTPMiddleware):
         self._redis = redis_client
         self._cookie_secure = cookie_secure
         self._session_ttl = session_ttl_seconds
-        self._use_memory = redis_client is None
+        # In testing, we force memory mode. In prod, we prefer Redis.
+        from somaai.settings import settings
+        self._use_memory = settings.is_testing and redis_client is None
 
         if self._use_memory:
             logger.info("SessionMiddleware using in-memory store (no Redis)")
@@ -76,6 +78,21 @@ class SessionMiddleware(BaseHTTPMiddleware):
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
         """Process request: validate/create session, then continue."""
+        # 0. Lazy-sync Redis client if not provided
+        if self._redis is None and not self._use_memory:
+            from somaai.utils.redis import get_general_redis
+
+            try:
+                self._redis = await get_general_redis()
+                logger.debug("SessionMiddleware successfully attached to Redis")
+            except Exception as e:
+                logger.warning(
+                    "Failed to attach SessionMiddleware to Redis, "
+                    "falling back to memory: %s",
+                    e,
+                )
+                self._use_memory = True
+
         # Skip non-API routes
         path = request.url.path
         if any(path.startswith(prefix) for prefix in _SKIP_PREFIXES):
@@ -150,7 +167,12 @@ class SessionMiddleware(BaseHTTPMiddleware):
         if self._use_memory:
             return _memory_store.get(token)
 
-        raw = await self._redis.get(f"session:{token}")
+        try:
+            raw = await self._redis.get(f"session:{token}")
+        except Exception as e:
+            logger.warning("Redis session read failed, treating as new session: %s", e)
+            return None
+
         if raw is None:
             return None
         import json
@@ -168,11 +190,17 @@ class SessionMiddleware(BaseHTTPMiddleware):
 
         import json
 
-        await self._redis.set(
-            f"session:{token}",
-            json.dumps(data),
-            ex=self._session_ttl,
-        )
+        try:
+            await self._redis.set(
+                f"session:{token}",
+                json.dumps(data),
+                ex=self._session_ttl,
+            )
+        except Exception as e:
+            # Non-fatal: the session cookie will still be set, and on the
+            # next request we'll create a fresh session if Redis is back.
+            logger.warning("Redis session write failed: %s", e)
+
 
 
 def clear_memory_store() -> None:

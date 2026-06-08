@@ -18,7 +18,6 @@ async def test_ingestion_flow():
     print("\n--- Testing Ingestion Orchestrator ---")
 
     # Mock settings
-    from somaai.settings import Settings
 
     settings = Settings(llm_backend="mock")
 

@@ -34,14 +34,25 @@ def setup_middleware(app: FastAPI) -> None:
         session_ttl_seconds=settings.session_ttl_days * 24 * 60 * 60,
     )
 
-    # 2. CORS
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origin_regex=".*",
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # 2. CORS — use explicit calls to satisfy the type checker
+    if "*" in settings.cors_allowed_origins:
+        # Dev/wildcard mode: allow_credentials + regex workaround
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origin_regex=".*",
+            allow_credentials=settings.cors_allow_credentials,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    else:
+        # Production: strict origin allowlist
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.cors_allowed_origins,
+            allow_credentials=settings.cors_allow_credentials,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     # 3. Rate limiting with slowapi (Redis-backed for horizontal scaling)
     try:
@@ -51,8 +62,6 @@ def setup_middleware(app: FastAPI) -> None:
 
         # Try Redis storage for distributed rate limiting
         try:
-            from somaai.settings import settings
-
             if settings.is_testing:
                 raise ImportError("Skip Redis in tests")
 
