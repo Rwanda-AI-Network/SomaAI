@@ -112,6 +112,8 @@ class Settings(BaseSettings):
     session_ttl_days: int = 90
     rag_enable_input_validation: bool = True
     rag_enable_hybrid_search: bool = True
+    cors_allowed_origins: list[str] = ["*"]
+    cors_allow_credentials: bool = True
 
     # Monitoring
     enable_metrics: bool = True
