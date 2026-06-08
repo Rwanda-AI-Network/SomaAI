@@ -56,7 +56,7 @@ format:
 
 test:
 	@echo "Running tests..."
-	uv run pytest -v
+	SOMAAI_ENV=test uv run --extra all pytest -v
 
 run:
 	@echo "Running application..."
@@ -75,7 +75,7 @@ version:
 docker-build:
 	@echo "Building Docker image: $(IMAGE_NAME):latest and $(IMAGE_NAME):$(VERSION)..."
 	uv lock
-	docker build -t $(IMAGE_NAME):latest -t $(IMAGE_NAME):$(VERSION) .
+	docker build -f docker/Dockerfile -t $(IMAGE_NAME):latest -t $(IMAGE_NAME):$(VERSION) .
 
 docker-push:
 	@echo "Pushing images to Docker Hub..."
@@ -87,7 +87,7 @@ docker-up:
 		echo "Initializing .env from deployment/.env.example..."; \
 		cp deployment/.env.example .env; \
 	fi
-	docker-compose -f deployment/docker-compose.yml up -d
+	docker-compose -f deployment/docker-compose.yml up -d --build
 
 docker-down:
 	docker-compose -f deployment/docker-compose.yml down

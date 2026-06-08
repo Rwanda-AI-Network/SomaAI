@@ -50,9 +50,15 @@ async def _seed_grades():
     """Seed grade records and return their IDs."""
     async with async_session_maker() as db:
         grades = [
-            CurriculumMetadata(type="grade", key="P6", name="Primary 6", display_order=6),
-            CurriculumMetadata(type="grade", key="S1", name="Senior 1", display_order=7),
-            CurriculumMetadata(type="grade", key="S2", name="Senior 2", display_order=8),
+            CurriculumMetadata(
+                id="P6", type="grade", key="P6", name="Primary 6", display_order=6
+            ),
+            CurriculumMetadata(
+                id="S1", type="grade", key="S1", name="Senior 1", display_order=7
+            ),
+            CurriculumMetadata(
+                id="S2", type="grade", key="S2", name="Senior 2", display_order=8
+            ),
         ]
         for g in grades:
             db.add(g)
@@ -64,9 +70,27 @@ async def _seed_subjects():
     """Seed subject records and return their IDs."""
     async with async_session_maker() as db:
         subjects = [
-            CurriculumMetadata(type="subject", key="mathematics", name="Mathematics", display_order=1),
-            CurriculumMetadata(type="subject", key="english", name="English", display_order=2),
-            CurriculumMetadata(type="subject", key="science", name="Science", display_order=3),
+            CurriculumMetadata(
+                id="mathematics",
+                type="subject",
+                key="mathematics",
+                name="Mathematics",
+                display_order=1,
+            ),
+            CurriculumMetadata(
+                id="english",
+                type="subject",
+                key="english",
+                name="English",
+                display_order=2,
+            ),
+            CurriculumMetadata(
+                id="science",
+                type="subject",
+                key="science",
+                name="Science",
+                display_order=3,
+            ),
         ]
         for s in subjects:
             db.add(s)
@@ -118,6 +142,9 @@ async def _cleanup_all():
     """Remove all seeded data (topics → docs → subjects → grades)."""
     from sqlalchemy import delete
 
+    from somaai.db.session import init_db
+
+    await init_db()
     async with async_session_maker() as db:
         await db.execute(delete(Topic))
         await db.execute(delete(Document))
@@ -131,7 +158,7 @@ async def _cleanup_all():
 
 
 class TestGetGrades:
-    """GET /api/v1/meta/grades — curriculum grade levels."""
+    """GET /api/v1/meta/metadata?type=grade — curriculum grade levels."""
 
     def setup_method(self):
         invalidate_meta_cache()
@@ -143,14 +170,14 @@ class TestGetGrades:
 
     def test_returns_empty_list_when_no_grades(self, client: TestClient):
         """Empty DB → empty list, not an error."""
-        response = client.get("/api/v1/meta/grades")
+        response = client.get("/api/v1/meta/metadata?type=grade")
         assert response.status_code == 200
         assert response.json() == []
 
     def test_returns_seeded_grades(self, client: TestClient):
         """Seeded grades appear in response."""
         _run(_seed_grades())
-        response = client.get("/api/v1/meta/grades")
+        response = client.get("/api/v1/meta/metadata?type=grade")
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 3
@@ -160,7 +187,7 @@ class TestGetGrades:
     def test_response_schema(self, client: TestClient):
         """Each grade has id, name, display_order, level."""
         _run(_seed_grades())
-        data = client.get("/api/v1/meta/grades").json()
+        data = client.get("/api/v1/meta/metadata?type=grade").json()
         for grade in data:
             assert isinstance(grade["id"], str)
             assert isinstance(grade["key"], str)
@@ -170,14 +197,14 @@ class TestGetGrades:
     def test_sorted_by_display_order(self, client: TestClient):
         """Grades are returned in ascending display_order."""
         _run(_seed_grades())
-        data = client.get("/api/v1/meta/grades").json()
+        data = client.get("/api/v1/meta/metadata?type=grade").json()
         orders = [g["display_order"] for g in data]
         assert orders == sorted(orders), f"Not sorted: {orders}"
 
     def test_no_duplicate_ids(self, client: TestClient):
         """Grade IDs must be unique."""
         _run(_seed_grades())
-        data = client.get("/api/v1/meta/grades").json()
+        data = client.get("/api/v1/meta/metadata?type=grade").json()
         ids = [g["key"] for g in data]
         assert len(ids) == len(set(ids)), f"Duplicate IDs: {ids}"
 
@@ -188,7 +215,7 @@ class TestGetGrades:
 
 
 class TestGetSubjects:
-    """GET /api/v1/meta/subjects — curriculum subjects."""
+    """GET /api/v1/meta/metadata?type=subject — curriculum subjects."""
 
     def setup_method(self):
         invalidate_meta_cache()
@@ -201,13 +228,13 @@ class TestGetSubjects:
     def test_returns_all_subjects_without_filter(self, client: TestClient):
         """No grade param → all subjects returned."""
         _run(_seed_subjects())
-        data = client.get("/api/v1/meta/subjects").json()
+        data = client.get("/api/v1/meta/metadata?type=subject").json()
         assert len(data) == 3
 
     def test_response_schema(self, client: TestClient):
         """Each subject has id, name, display_order, icon."""
         _run(_seed_subjects())
-        data = client.get("/api/v1/meta/subjects").json()
+        data = client.get("/api/v1/meta/metadata?type=subject").json()
         for s in data:
             assert isinstance(s["id"], str)
             assert isinstance(s["key"], str)
@@ -217,7 +244,7 @@ class TestGetSubjects:
     def test_sorted_by_display_order(self, client: TestClient):
         """Subjects returned in ascending display_order."""
         _run(_seed_subjects())
-        data = client.get("/api/v1/meta/subjects").json()
+        data = client.get("/api/v1/meta/metadata?type=subject").json()
         orders = [s["display_order"] for s in data]
         assert orders == sorted(orders)
 
@@ -226,15 +253,15 @@ class TestGetSubjects:
         _run(_seed_subjects())
         _run(_seed_document("S2", "science"))
 
-        data = client.get("/api/v1/meta/subjects?grade=S2").json()
+        data = client.get("/api/v1/meta/metadata?type=subject&only_with_docs=true").json()
         ids = [s["id"] for s in data]
         assert "science" in ids
 
     def test_grade_filter_cold_start_returns_all(self, client: TestClient):
         """No documents for grade → returns all subjects (cold start)."""
         _run(_seed_subjects())
-        # No documents seeded for S1
-        data = client.get("/api/v1/meta/subjects?grade=S1").json()
+        # No documents seeded — all subjects returned
+        data = client.get("/api/v1/meta/metadata?type=subject").json()
         assert len(data) == 3  # All subjects
 
     def test_grade_filter_with_multiple_documents(self, client: TestClient):
@@ -244,7 +271,7 @@ class TestGetSubjects:
         _run(_seed_document("S2", "science"))  # Duplicate subject
         _run(_seed_document("S2", "mathematics"))
 
-        data = client.get("/api/v1/meta/subjects?grade=S2").json()
+        data = client.get("/api/v1/meta/metadata?type=subject&only_with_docs=true").json()
         ids = [s["id"] for s in data]
         assert "science" in ids
         assert "mathematics" in ids
@@ -253,7 +280,7 @@ class TestGetSubjects:
 
     def test_empty_when_not_seeded(self, client: TestClient):
         """No subjects in DB → empty list."""
-        data = client.get("/api/v1/meta/subjects").json()
+        data = client.get("/api/v1/meta/metadata?type=subject").json()
         assert data == []
 
 
@@ -417,30 +444,25 @@ class TestMetaCache:
         """Second GET /grades uses cached data (no DB hit)."""
         _run(_seed_grades())
         # First call — populates cache
-        data1 = client.get("/api/v1/meta/grades").json()
-        assert _run(_get_cached("grades:only_docs=False")) is not None
+        data1 = client.get("/api/v1/meta/metadata?type=grade").json()
+        assert _run(_get_cached("metadata:type=grade:only_docs=False")) is not None
 
         # Second call — should use cache
-        data2 = client.get("/api/v1/meta/grades").json()
+        data2 = client.get("/api/v1/meta/metadata?type=grade").json()
         assert data1 == data2
         _run(_cleanup_all())
 
-    def test_subject_cache_key_includes_grade(self, client: TestClient):
-        """Subjects for different grades use different cache keys."""
+    def test_subject_cache_key(self, client: TestClient):
+        """Subject metadata uses metadata:type=subject cache key."""
         _run(_seed_subjects())
-        client.get("/api/v1/meta/subjects?grade=S1")
-        client.get("/api/v1/meta/subjects?grade=S2")
+        client.get("/api/v1/meta/metadata?type=subject")
 
-        assert _run(_get_cached("subjects:grade=S1:only_docs=False")) is not None
-        assert _run(_get_cached("subjects:grade=S2:only_docs=False")) is not None
-        cached_s1 = _run(_get_cached("subjects:grade=S1:only_docs=False"))
-        cached_s2 = _run(_get_cached("subjects:grade=S2:only_docs=False"))
-        assert cached_s1 is not cached_s2
+        assert _run(_get_cached("metadata:type=subject:only_docs=False")) is not None
         _run(_cleanup_all())
 
     def test_subjects_all_cache_key(self, client: TestClient):
         """Subjects without grade uses 'subjects:all' cache key."""
         _run(_seed_subjects())
-        client.get("/api/v1/meta/subjects")
-        assert _run(_get_cached("subjects:grade=None:only_docs=False")) is not None
+        client.get("/api/v1/meta/metadata?type=subject")
+        assert _run(_get_cached("metadata:type=subject:only_docs=False")) is not None
         _run(_cleanup_all())

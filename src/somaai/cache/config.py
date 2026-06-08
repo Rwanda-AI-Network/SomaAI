@@ -67,15 +67,12 @@ class CacheConfig:
                 retrieval_ttl=int(os.getenv("SOMAAI_CACHE_RETRIEVAL_TTL", "3600")),
                 session_ttl=int(os.getenv("SOMAAI_CACHE_SESSION_TTL", "3600")),
                 semantic_enabled=(
-                    os.getenv("SOMAAI_CACHE_SEMANTIC_ENABLED", "true").lower()
-                    == "true"
+                    os.getenv("SOMAAI_CACHE_SEMANTIC_ENABLED", "true").lower() == "true"
                 ),
                 similarity_threshold=float(
                     os.getenv("SOMAAI_CACHE_SIMILARITY_THRESHOLD", "0.92")
                 ),
-                embedding_dimension=int(
-                    os.getenv("SOMAAI_CACHE_EMBEDDING_DIM", "768")
-                ),
+                embedding_dimension=int(os.getenv("SOMAAI_CACHE_EMBEDDING_DIM", "768")),
                 namespace=os.getenv("SOMAAI_CACHE_NAMESPACE", "somaai"),
             )
 

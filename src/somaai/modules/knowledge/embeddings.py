@@ -2,21 +2,27 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-from langchain_core.embeddings import Embeddings
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_openai import OpenAIEmbeddings
-
 if TYPE_CHECKING:
+    from langchain_huggingface import HuggingFaceEmbeddings
+    from langchain_openai import OpenAIEmbeddings
+
     from somaai.settings import Settings
 
 logger = logging.getLogger(__name__)
 
+try:
+    from langchain_core.embeddings import Embeddings as _EmbeddingsBase
+except ImportError:
+    _EmbeddingsBase = object  # type: ignore[assignment,misc]
 
-class ThreadSafeEmbeddings(Embeddings):
+if TYPE_CHECKING:
+    # Ensure static analysis sees a single concrete type
+    from langchain_core.embeddings import Embeddings as _EmbeddingsBase
+
+
+class ThreadSafeEmbeddings(_EmbeddingsBase):
     """LangChain-compatible wrapper that offloads sync inference to a thread.
 
     HuggingFace ``embed_query`` / ``embed_documents`` are CPU-bound.
@@ -50,11 +56,19 @@ class ThreadSafeEmbeddings(Embeddings):
 
 
 # Singleton embeddings model (wrapped for thread safety)
-_EMBEDDINGS_MODEL: ThreadSafeEmbeddings | Embeddings | None = None
+_EMBEDDINGS_MODEL = None
 
 
-class MockEmbeddings(Embeddings):
+class MockEmbeddings:
     """Zero-overhead embeddings for tests (prevents model downloads in CI)."""
+
+    def __init__(self):
+        try:
+            from langchain_core.embeddings import Embeddings
+
+            self._base = Embeddings
+        except ImportError:
+            self._base = object
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         return [[0.0] * 384 for _ in texts]
@@ -89,6 +103,8 @@ def get_embeddings(settings: Settings) -> ThreadSafeEmbeddings:
             return _EMBEDDINGS_MODEL
 
         logger.info("Creating HuggingFace embeddings model (local)")
+        from langchain_huggingface import HuggingFaceEmbeddings
+
         inner = HuggingFaceEmbeddings(
             model_name="all-MiniLM-L6-v2",
             model_kwargs={"device": "cpu"},

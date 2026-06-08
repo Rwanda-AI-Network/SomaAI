@@ -1,7 +1,6 @@
 """Automated migration management."""
 
 import logging
-import os
 from pathlib import Path
 
 from alembic import command
@@ -25,7 +24,9 @@ def run_auto_migrations() -> None:
     ini_path = base_dir / "alembic.ini"
 
     if not ini_path.exists():
-        logger.warning("alembic.ini not found at %s. Skipping auto-migrations.", ini_path)
+        logger.warning(
+            "alembic.ini not found at %s. Skipping auto-migrations.", ini_path
+        )
         return
 
     logger.info("Running automated migrations...")

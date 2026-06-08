@@ -8,19 +8,26 @@ import logging
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 from somaai.settings import settings
 
 logger = logging.getLogger(__name__)
 
 # Create async engine
-db_host = settings.database_url.split("@")[-1] if "@" in settings.database_url else "local/sqlite"
+db_host = (
+    settings.database_url.split("@")[-1]
+    if "@" in settings.database_url
+    else "local/sqlite"
+)
 logger.debug("Connecting to DB: %s", db_host)
 
-# SQLite uses StaticPool which does not accept pool_size/max_overflow/pool_timeout.
-# Only apply production pool settings for connection-based backends (PostgreSQL).
+# SQLite uses StaticPool to share a single in-memory connection across all sessions.
+# Production (Postgres) uses connection pooling with pool_size.
 _pool_kwargs: dict = {}
-if not settings.is_sqlite:
+if settings.is_sqlite:
+    _pool_kwargs = {"poolclass": StaticPool}
+else:
     _pool_kwargs = {
         "pool_size": settings.db_pool_size,
         "max_overflow": settings.db_max_overflow,

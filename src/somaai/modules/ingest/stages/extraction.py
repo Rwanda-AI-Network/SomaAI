@@ -300,9 +300,7 @@ class ExtractionStage(PipelineStage):
 
                 # Write to temp file for extractor compatibility
                 suffix = Path(ctx.storage_key).suffix or ".pdf"
-                with tempfile.NamedTemporaryFile(
-                    delete=False, suffix=suffix
-                ) as tmp:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                     tmp.write(file_data)
                     temp_path = Path(tmp.name)
 
@@ -314,9 +312,7 @@ class ExtractionStage(PipelineStage):
             elif ctx.file_content:
                 # Bytes in memory — write to temp file
                 suffix = Path(str(ctx.file_path)).suffix or ".pdf"
-                with tempfile.NamedTemporaryFile(
-                    delete=False, suffix=suffix
-                ) as tmp:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                     tmp.write(ctx.file_content)
                     temp_path = Path(tmp.name)
 
@@ -324,9 +320,7 @@ class ExtractionStage(PipelineStage):
                 # Existing stream — read and write to temp file
                 data = await asyncio.to_thread(ctx.file_stream.read)
                 suffix = Path(str(ctx.file_path)).suffix or ".pdf"
-                with tempfile.NamedTemporaryFile(
-                    delete=False, suffix=suffix
-                ) as tmp:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                     tmp.write(data)
                     temp_path = Path(tmp.name)
 
@@ -411,9 +405,7 @@ class ExtractionStage(PipelineStage):
                     temp_path.unlink()
                     logger.debug(f"[{ctx.doc_id}] Cleaned up temp file: {temp_path}")
                 except Exception as e:
-                    logger.warning(
-                        f"[{ctx.doc_id}] Failed to clean up temp file: {e}"
-                    )
+                    logger.warning(f"[{ctx.doc_id}] Failed to clean up temp file: {e}")
 
     def _log_extraction_summary(self, ctx: PipelineContext) -> None:
         """Log extraction results for monitoring."""

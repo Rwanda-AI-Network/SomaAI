@@ -82,12 +82,21 @@ class Settings(BaseSettings):
     minio_bucket: str = "somaai-documents"
     minio_secure: bool = False
 
+    # Storage (S3 - for production)
+    s3_bucket: str | None = None
+    s3_region: str = "us-east-1"
+    s3_access_key: str | None = None
+    s3_secret_key: SecretStr | None = None
+    s3_endpoint_url: str | None = None
+
     # LLM
     llm_backend: str = "groq"
-    groq_api_key: SecretStr | None = ""
-    groq_model: str = "llama-3.3-70b-versatile" # openai/gpt-oss-120b
+    groq_api_key: SecretStr | None = None
+    groq_model: str = "llama-3.3-70b-versatile"
     gemini_api_key: SecretStr | None = None
     gemini_model: str = "gemini-1.5-flash"
+    openai_api_key: SecretStr | None = None
+    openai_model: str = "gpt-4o"
 
     # Ingestion
     max_file_size: int = 100 * 1024 * 1024  # 100 MB
@@ -140,6 +149,12 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate(self) -> "Settings":
+        if self.is_testing:
+            # Force SQLite for tests regardless of .env or current environment
+            if not self.is_sqlite:
+                self.database_url = "sqlite+aiosqlite:///:memory:"
+                logger.info("Forcing SQLite in-memory for testing")
+
         if self.is_production:
             if self.is_sqlite:
                 raise ValueError(

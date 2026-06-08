@@ -20,9 +20,6 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_openai import OpenAIEmbeddings
-from langchain_qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
 from qdrant_client.models import FieldCondition, Filter, MatchValue
 from tenacity import (
@@ -39,6 +36,8 @@ from somaai.modules.knowledge.vectorstore import VectorStore
 from somaai.utils.files import compute_file_hash
 
 if TYPE_CHECKING:
+    from langchain_qdrant import QdrantVectorStore
+
     from somaai.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -109,7 +108,7 @@ class QdrantStore(VectorStore):
             settings: Application settings
         """
         self.settings = settings
-        self._store: QdrantVectorStore | None = None
+        self._store = None
 
     def _meta_key(self, field: str) -> str:
         """Build the full Qdrant payload key for a metadata field.
@@ -131,7 +130,7 @@ class QdrantStore(VectorStore):
         return get_qdrant_client(self.settings)
 
     @property
-    def embeddings(self) -> HuggingFaceEmbeddings | OpenAIEmbeddings:
+    def embeddings(self):
         """Get singleton embeddings model."""
         return get_embeddings(self.settings)
 
@@ -145,20 +144,25 @@ class QdrantStore(VectorStore):
         if self._store is not None:
             return self._store
 
+        from langchain_qdrant import QdrantVectorStore
+
         collection_name = self.settings.qdrant_collection
 
         # Hybrid search setup
         sparse_encoder = None
         if self.settings.rag_enable_hybrid_search:
             try:
-                from langchain_qdrant import FastEmbedSparseEncoder
+                from langchain_qdrant import FastEmbedSparse
 
-                sparse_encoder = FastEmbedSparseEncoder(
+                sparse_encoder = FastEmbedSparse(
                     model_name="Qdrant/bm25",
                 )
-                logger.info("Hybrid search enabled with FastEmbedSparseEncoder (BM25)")
+                logger.info("Hybrid search enabled with FastEmbedSparse (BM25)")
             except Exception as e:
-                logger.warning(f"Failed to initialize sparse encoder: {e}. Falling back to dense search.")
+                logger.warning(
+                    f"Failed to initialize sparse encoder: {e}. "
+                    "Falling back to dense search."
+                )
 
         # Ensure collection exists — sync I/O → thread
         exists = await asyncio.to_thread(self.client.collection_exists, collection_name)
@@ -175,7 +179,7 @@ class QdrantStore(VectorStore):
                 from qdrant_client.models import Distance, VectorParams
 
                 # If sparse encoder is present, we should configure it in vectors_config
-                # though QdrantVectorStore handles creation if we don't, 
+                # though QdrantVectorStore handles creation if we don't,
                 # but it's better to be explicit.
                 await asyncio.to_thread(
                     self.client.create_collection,
@@ -203,15 +207,23 @@ class QdrantStore(VectorStore):
         if sparse_encoder:
             try:
                 import inspect
-                from langchain_qdrant import QdrantVectorStore as QVS
 
-                sig = inspect.signature(QVS.__init__)
-                if "sparse_encoder" in sig.parameters:
+                from langchain_qdrant import QdrantVectorStore
+
+                sig = inspect.signature(QdrantVectorStore.__init__)
+                if "sparse_embedding" in sig.parameters:
+                    store_kwargs["sparse_embedding"] = sparse_encoder
+                    logger.debug(
+                        "QdrantVectorStore initialized with sparse_embedding support"
+                    )
+                elif "sparse_encoder" in sig.parameters:
                     store_kwargs["sparse_encoder"] = sparse_encoder
-                    logger.debug("QdrantVectorStore initialized with hybrid search support")
+                    logger.debug(
+                        "QdrantVectorStore initialized with sparse_encoder support"
+                    )
                 else:
                     logger.warning(
-                        "Installed langchain-qdrant does not support sparse_encoder. "
+                        "Installed langchain-qdrant does not support sparse_embedding or sparse_encoder. "
                         "Falling back to dense-only search."
                     )
             except Exception as e:

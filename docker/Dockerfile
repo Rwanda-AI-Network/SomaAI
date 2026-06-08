@@ -28,6 +28,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # Copy source code and alembic configuration
 COPY src/ ./src/
+COPY scripts/ ./scripts/
 COPY alembic.ini ./
 
 # Install the project and pre-compile bytecode
@@ -90,4 +91,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 EXPOSE 8000
 
 # Run directly with the venv's python/uvicorn
-CMD ["uvicorn", "somaai.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "somaai.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

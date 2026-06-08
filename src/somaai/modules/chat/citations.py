@@ -258,9 +258,7 @@ class CitationExtractor:
 
         # Batch-verify which chunk_ids actually exist in PostgreSQL.
         # This prevents FK violations when Qdrant has stale data.
-        result = await db.execute(
-            select(Chunk.id).where(Chunk.id.in_(chunk_ids))
-        )
+        result = await db.execute(select(Chunk.id).where(Chunk.id.in_(chunk_ids)))
         valid_chunk_ids = {row[0] for row in result}
 
         skipped = 0

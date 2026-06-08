@@ -231,8 +231,6 @@ class StreamFactory:
         # Create managed stream
         return ManagedStream(stream=stream, doc_id=doc_id)
 
-
-
     @staticmethod
     def _is_seekable(stream: BinaryIO) -> bool:
         """Check if stream is seekable.

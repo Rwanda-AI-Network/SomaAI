@@ -29,9 +29,7 @@ def _get_meta_service(db: AsyncSession = Depends(get_session)) -> MetaService:
 
 @router.get("/metadata", response_model=list[MetadataResponse])
 async def list_metadata(
-    type: str | None = Query(
-        None, description="Filter by type: 'grade' or 'subject'"
-    ),
+    type: str | None = Query(None, description="Filter by type: 'grade' or 'subject'"),
     only_with_docs: bool = Query(
         False, description="If True, only return entries with documents"
     ),

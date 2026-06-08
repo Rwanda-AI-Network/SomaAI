@@ -22,8 +22,8 @@ async def lifespan(app: FastAPI):
 
     # --- Automated Database Management ---
     if not settings.is_testing:
-        from somaai.db.migrations.auto import run_auto_migrations
         from scripts.seed_meta import main as seed_main
+        from somaai.db.migrations.auto import run_auto_migrations
 
         # Run Alembic migrations (Sync)
         run_auto_migrations()

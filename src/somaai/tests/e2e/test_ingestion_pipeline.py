@@ -18,9 +18,9 @@ async def test_ingestion_flow():
     print("\n--- Testing Ingestion Orchestrator ---")
 
     # Mock settings
-    from somaai.settings import LLMSettings
+    from somaai.settings import Settings
 
-    settings = Settings(llm=LLMSettings(backend="mock"))
+    settings = Settings(llm_backend="mock")
 
     # Mock QdrantStore to avoid real DB connection
     with (

@@ -16,7 +16,7 @@ def setup_middleware(app: FastAPI) -> None:
     # Handle CORS with an architectural decision for development vs production:
     # If allow_origins contains "*", we use allow_origin_regex to support credentials.
     from typing import Any
-    
+
     cors_params: dict[str, Any] = {
         "allow_credentials": settings.cors_allow_credentials,
         "allow_methods": ["*"],
@@ -24,10 +24,17 @@ def setup_middleware(app: FastAPI) -> None:
     }
 
     if "*" in settings.cors_allowed_origins:
-        # Standard FastAPI/Starlette CORSMiddleware doesn't allow "*" with allow_credentials=True.
+        # Standard FastAPI CORSMiddleware doesn't allow "*"
+        # when allow_credentials=True.
         # We use a broad regex but explicitly allow local origins for Swagger/tools.
-        cors_params["allow_origin_regex"] = "https?://(localhost|127\.0\.0\.1)(:[0-9]+)?.*"
-        cors_params["allow_origins"] = ["http://localhost", "http://localhost:8000", "http://127.0.0.1:8000"]
+        cors_params["allow_origin_regex"] = (
+            r"https?://(localhost|127\.0\.0\.1)(:[0-9]+)?.*"
+        )
+        cors_params["allow_origins"] = [
+            "http://localhost",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+        ]
     else:
         cors_params["allow_origins"] = settings.cors_allowed_origins
 

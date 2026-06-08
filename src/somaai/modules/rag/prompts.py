@@ -4,6 +4,8 @@ Provides grade-appropriate prompts for students and teachers,
 with support for analogies, real-world examples, and citations.
 """
 
+# ruff: noqa: E501
+
 SYSTEM_PROMPT = (
     "You are SomaAI, a warm and knowledgeable educational assistant "
     "for Rwandan students and teachers.\n"
@@ -18,7 +20,7 @@ SYSTEM_PROMPT = (
     "these cases.\n"
     "2. If information is NOT in the provided content (and it's not a "
     "pleasantry), say:\n"
-    '   "I don\'t have this information in the curriculum. '
+    "   \"I don't have this information in the curriculum. "
     "Maybe you can try asking another question, a teacher or try "
     'again later when the material is available."\n'
     "3. NEVER make up curriculum facts.\n"
@@ -302,15 +304,13 @@ def format_prompt(
     # Structure and Follow-up instructions
     follow_up_instruction = ""
     structure_instruction = ""
-    
+
     # If there is a previous answer, we ONLY inject the follow-up instruction
     if previous_answer:
         truncated = previous_answer[:800]
         if len(previous_answer) > 800:
             truncated += "\n[... rest of previous answer omitted ...]"
-        follow_up_instruction = FOLLOW_UP_INSTRUCTION.format(
-            previous_answer=truncated
-        )
+        follow_up_instruction = FOLLOW_UP_INSTRUCTION.format(previous_answer=truncated)
     # Otherwise, inject the default structure for the role
     else:
         role = kwargs.get("user_role", "student")
@@ -373,5 +373,3 @@ Respond in this exact JSON format:
   "standalone_question": "The rephrased standalone question (or original input)"
 }}
 ```"""
-
-

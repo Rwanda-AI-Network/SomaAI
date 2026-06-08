@@ -9,13 +9,38 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-from somaai.app import create_app
+
+# Defer imports that trigger DB initialization until after environment is set.
+# from somaai.app import create_app  <-- DO NOT IMPORT HERE
 
 
 def pytest_configure(config):
     """Set environment variables before any test imports happen."""
     os.environ["SOMAAI_ENV"] = "test"
-    os.environ["SOMAAI_LLM__BACKEND"] = "mock"
+    os.environ["SOMAAI_DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
+    os.environ["SOMAAI_LLM_BACKEND"] = "mock"
+
+
+@pytest.fixture(scope="session", autouse=True)
+async def cleanup_system_resources():
+    """Dispose of global resources (DB engine, Qdrant client) after all tests."""
+    yield
+    
+    # 1. Dispose of SQLAlchemy engine
+    try:
+        from somaai.db.session import engine
+        await engine.dispose()
+    except Exception:
+        pass
+
+    # 2. Close Qdrant client if it exists
+    try:
+        import somaai.modules.knowledge.stores.qdrant as qdrant_module
+        if qdrant_module._QDRANT_CLIENT:
+            qdrant_module._QDRANT_CLIENT.close()
+            qdrant_module._QDRANT_CLIENT = None
+    except Exception:
+        pass
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -30,7 +55,7 @@ def _seed_test_metadata(request):
 
     from sqlalchemy.exc import IntegrityError
 
-    from somaai.db.models import Grade, Subject
+    from somaai.db.models import CurriculumMetadata
     from somaai.db.session import async_session_maker
 
     async def _seed():
@@ -55,11 +80,13 @@ def _seed_test_metadata(request):
             ]:
                 try:
                     await db.merge(
-                        Grade(
+                        CurriculumMetadata(
                             id=g_id,
+                            type="grade",
+                            key=g_id,
                             name=f"Grade {g_id}",
-                            level="primary" if g_id.startswith("P") else "secondary",
                             display_order=1,
+                            is_active=True,
                         )
                     )
                     await db.commit()
@@ -84,10 +111,13 @@ def _seed_test_metadata(request):
             ]:
                 try:
                     await db.merge(
-                        Subject(
+                        CurriculumMetadata(
                             id=s_id,
+                            type="subject",
+                            key=s_id,
                             name=s_id.replace("_", " ").title(),
                             display_order=1,
+                            is_active=True,
                         )
                     )
                     await db.commit()
@@ -138,15 +168,16 @@ def client():
     """
     from unittest.mock import AsyncMock, MagicMock, patch
 
+    from somaai.app import create_app
     from somaai.deps import get_settings
     from somaai.settings import Settings
 
     app = create_app()
 
     def get_test_settings():
-        from somaai.settings import LLMSettings
+        from somaai.settings import Settings
 
-        return Settings(llm=LLMSettings(backend="mock"))
+        return Settings(llm_backend="mock")
 
     app.dependency_overrides[get_settings] = get_test_settings
 
@@ -195,3 +226,59 @@ def client():
 
         with TestClient(app) as c:
             yield c
+
+
+@pytest.fixture
+async def async_client():
+    """Create async test client for tests that need httpx.AsyncClient.
+
+    Uses the same mock strategy as the sync `client` fixture.
+    """
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from httpx import ASGITransport, AsyncClient
+
+    from somaai.app import create_app
+    from somaai.deps import get_settings
+    from somaai.settings import Settings
+
+    app = create_app()
+
+    def get_test_settings():
+        return Settings(llm_backend="mock")
+
+    app.dependency_overrides[get_settings] = get_test_settings
+
+    with (
+        patch("somaai.modules.knowledge.stores.qdrant.QdrantStore") as mock_store_cls,
+        patch(
+            "somaai.modules.rag.retriever.Retriever.retrieve",
+            new_callable=AsyncMock,
+        ) as mock_retrieve,
+        patch(
+            "somaai.utils.redis.get_cache_redis", new_callable=AsyncMock
+        ) as mock_redis_cache,
+        patch(
+            "somaai.utils.redis.get_general_redis", new_callable=AsyncMock
+        ) as mock_redis_gen,
+        patch(
+            "somaai.utils.redis.get_jobs_redis", new_callable=AsyncMock
+        ) as mock_redis_jobs,
+        patch("somaai.health.get_qdrant_client") as mock_qdrant_client_func,
+    ):
+        for m in [mock_redis_cache, mock_redis_gen, mock_redis_jobs]:
+            redis_inst = AsyncMock()
+            redis_inst.get.return_value = None
+            redis_inst.setex.return_value = True
+            redis_inst.delete.return_value = True
+            m.return_value = redis_inst
+
+        mock_store = MagicMock()
+        mock_store.add.return_value = True
+        mock_store_cls.return_value = mock_store
+        mock_retrieve.return_value = []
+        mock_qdrant_client_func.return_value = MagicMock()
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
+            yield ac

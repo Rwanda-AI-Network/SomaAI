@@ -432,9 +432,7 @@ async def get_all_metadata(
     return list(result.scalars().all())
 
 
-async def create_metadata(
-    db: AsyncSession, metadata_data: dict
-) -> CurriculumMetadata:
+async def create_metadata(db: AsyncSession, metadata_data: dict) -> CurriculumMetadata:
     """Create a new curriculum metadata entry.
 
     Raises:

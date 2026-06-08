@@ -12,9 +12,9 @@ async def test_ingestion_orchestrator_flow():
     """Verify end-to-end ingestion orchestration using mocks."""
 
     # 1. Setup Environment
-    from somaai.settings import LLMSettings
+    from somaai.settings import Settings
 
-    settings = Settings(llm=LLMSettings(backend="mock"))
+    settings = Settings(llm_backend="mock")
 
     # Create a temporary test file if not exists, or use existing one
     # Assuming test_document.txt is at project root from previous context

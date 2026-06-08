@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from somaai.db.models import Grade, Subject
+from somaai.db.models import CurriculumMetadata
 from somaai.db.session import async_session_maker
 
 
@@ -22,14 +22,46 @@ def setup_metadata():
             try:
                 # Grades
                 db.add(
-                    Grade(id="S1", name="Senior 1", level="secondary", display_order=1)
+                    CurriculumMetadata(
+                        id="S1",
+                        type="grade",
+                        key="S1",
+                        name="Senior 1",
+                        display_order=1,
+                        is_active=True,
+                    )
                 )
                 db.add(
-                    Grade(id="S2", name="Senior 2", level="secondary", display_order=2)
+                    CurriculumMetadata(
+                        id="S2",
+                        type="grade",
+                        key="S2",
+                        name="Senior 2",
+                        display_order=2,
+                        is_active=True,
+                    )
                 )
                 # Subjects
-                db.add(Subject(id="science", name="Science", display_order=1))
-                db.add(Subject(id="math", name="Mathematics", display_order=2))
+                db.add(
+                    CurriculumMetadata(
+                        id="science",
+                        type="subject",
+                        key="science",
+                        name="Science",
+                        display_order=1,
+                        is_active=True,
+                    )
+                )
+                db.add(
+                    CurriculumMetadata(
+                        id="math",
+                        type="subject",
+                        key="math",
+                        name="Mathematics",
+                        display_order=2,
+                        is_active=True,
+                    )
+                )
                 await db.commit()
             except IntegrityError:
                 await db.rollback()

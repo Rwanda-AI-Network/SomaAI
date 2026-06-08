@@ -156,15 +156,14 @@ class TestResilienceHardening:
         assert resp.status_code == 504
         assert "timeout" in resp.json()["detail"].lower()
 
-    def test_ask_stream_returns_501(self, client: TestClient):
-        """Verify that the streaming endpoint returns 501 Not Implemented."""
+    def test_ask_stream_not_available(self, client: TestClient):
+        """Verify that the streaming endpoint is not available (removed)."""
         convo = _create_conversation(client)
         resp = client.post(
             f"/api/v1/chat/conversations/{convo['id']}/ask/stream",
             json={"question": "Can you stream?"},
         )
-        assert resp.status_code == 501
-        assert "not yet implemented" in resp.json()["detail"].lower()
+        assert resp.status_code == 404
 
     def test_invalid_cursor_encoding_fails_gracefully(self, client: TestClient):
         """Robustness: Junk cursors should not crash (fallback to beginning)."""

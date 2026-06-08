@@ -155,7 +155,9 @@ class RAGPipeline:
             # 2. Query condensation (only if history exists)
             search_query = clean_query
             if history and history.strip():
-                search_query = await self._condense_query(clean_query, history, grade, subject)
+                search_query = await self._condense_query(
+                    clean_query, history, grade, subject
+                )
                 debug.log_stage(
                     "condense",
                     original=clean_query,
@@ -173,7 +175,8 @@ class RAGPipeline:
                     )
             except (asyncio.TimeoutError, Exception) as e:
                 logger.error(
-                    f"Retrieval stage failed or timed out (timeout={isinstance(e, asyncio.TimeoutError)}): {e}",
+                    f"Retrieval stage failed or timed out "
+                    f"(timeout={isinstance(e, asyncio.TimeoutError)}): {e}",
                     extra={"query": search_query, "grade": grade},
                 )
                 # Mandatory fallback: insufficient context
@@ -211,7 +214,8 @@ class RAGPipeline:
                     )
             except (asyncio.TimeoutError, Exception) as e:
                 logger.error(
-                    f"Generation stage failed or timed out (timeout={isinstance(e, asyncio.TimeoutError)}): {e}",
+                    f"Generation stage failed or timed out "
+                    f"(timeout={isinstance(e, asyncio.TimeoutError)}): {e}",
                     extra={"query": search_query, "context_len": len(context_str)},
                 )
                 # Mandatory fallback: safe failed response
@@ -286,7 +290,9 @@ class RAGPipeline:
             )
             raise
 
-    async def _condense_query(self, query: str, history: str, grade: str, subject: str) -> str:
+    async def _condense_query(
+        self, query: str, history: str, grade: str, subject: str
+    ) -> str:
         """Rewrite query to be standalone using history.
 
         Args:
@@ -388,7 +394,7 @@ class RAGPipeline:
                 "to your question. This might be due to a technical issue or "
                 "heavy load on the system. Please try again in a moment."
             ),
-            "sufficiency": "sufficient", # Return as sufficient to prevent recursive retry
+            "sufficiency": "sufficient",  # Avoid recursive retry
             "is_grounded": False,
             "confidence": 0.0,
             "citations": [],

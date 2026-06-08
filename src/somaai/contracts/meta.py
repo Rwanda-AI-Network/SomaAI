@@ -16,14 +16,17 @@ class MetaType(str, Enum):
 class MetadataCreate(BaseModel):
     """Schema for creating a new curriculum metadata entry."""
 
-    type: MetaType = Field(
-        ..., description="Metadata category: 'grade' or 'subject'"
-    )
+    type: MetaType = Field(..., description="Metadata category: 'grade' or 'subject'")
     key: str = Field(
-        ..., description="Unique key (e.g., 'P6', 'computer_science')", min_length=1, max_length=50
+        ...,
+        description="Unique key (e.g., 'P6', 'computer_science')",
+        min_length=1,
+        max_length=50,
     )
     name: str = Field(
-        ..., description="Display name (e.g., 'Primary 6', 'Computer Science')", min_length=1
+        ...,
+        description="Display name (e.g., 'Primary 6', 'Computer Science')",
+        min_length=1,
     )
     display_order: int = Field(0, description="Sort order for UI")
     is_active: bool = Field(True, description="Whether this entry is active")
@@ -59,7 +62,6 @@ class MetadataResponse(BaseModel):
     is_active: bool = Field(True, description="Active flag")
     created_at: datetime | None = Field(None, description="Creation timestamp")
     updated_at: datetime | None = Field(None, description="Last update timestamp")
-
 
 
 class TopicCreate(BaseModel):

@@ -3,9 +3,11 @@
 Aggregates all v1 endpoint routers.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from somaai.api.security import verify_api_key
 
 from somaai.api.v1.endpoints import (
+    actors,
     chat,
     chunked_upload,
     docs,
@@ -17,7 +19,10 @@ from somaai.api.v1.endpoints import (
     teacher,
 )
 
-v1_router = APIRouter()
+v1_router = APIRouter(dependencies=[Depends(verify_api_key)])
+
+# Actors - Anonymous actor creation
+v1_router.include_router(actors.router)
 
 # Chat - Student and teacher Q&A
 v1_router.include_router(chat.router)

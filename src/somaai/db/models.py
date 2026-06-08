@@ -26,9 +26,9 @@ class CurriculumMetadata(Base):
     __tablename__ = "curriculum_metadata"
 
     id = Column(String(36), primary_key=True)
-    type = Column(String(20), nullable=False, index=True)   # "grade" | "subject"
-    key = Column(String(50), nullable=False, unique=True)    # "S6", "computer_science"
-    name = Column(String(100), nullable=False)               # "Secondary 6", "Computer Science"
+    type = Column(String(20), nullable=False, index=True)  # "grade" | "subject"
+    key = Column(String(50), nullable=False, unique=True)  # "S6", "computer_science"
+    name = Column(String(100), nullable=False)  # "Secondary 6", "Computer Science"
     display_order = Column(Integer, default=0)
     is_active = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

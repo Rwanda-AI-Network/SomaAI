@@ -95,7 +95,7 @@ class GroqLLMProvider:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_random_exponential(multiplier=1, max=10),
-        retry=retry_if_exception_type((Exception)),  # Narrower in production
+        retry=retry_if_exception_type(Exception),  # Narrower in production
         before_sleep=before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )
@@ -132,26 +132,29 @@ class GeminiLLMProvider:
 
     def __init__(self, api_key: str, model: str):
         try:
-            import google.generativeai as genai
+            from google import genai
         except ImportError:
             raise ImportError(
-                "google-generativeai package not found. "
-                "Install with 'pip install google-generativeai'"
+                "google-genai package not found. "
+                "Install with 'pip install google-genai'"
             )
 
-        genai.configure(api_key=api_key)
+        self.client = genai.Client(api_key=api_key)
         self.model_name = model.strip()
         # Ensure we don't have double models/ prefix
         if self.model_name.startswith("models/"):
             self.model_name = self.model_name.replace("models/", "", 1)
-        
-        self.client = genai.GenerativeModel(model_name=self.model_name)
-        self.fallback_models = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-1.0-pro"]
+
+        self.fallback_models = [
+            "gemini-1.5-flash",
+            "gemini-1.5-flash-latest",
+            "gemini-1.0-pro",
+        ]
 
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_random_exponential(multiplier=1, max=10),
-        retry=retry_if_exception_type((Exception)),
+        retry=retry_if_exception_type(Exception),
         before_sleep=before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )
@@ -162,7 +165,9 @@ class GeminiLLMProvider:
         except Exception as e:
             # If 404, try fallbacks
             if "404" in str(e) or "not found" in str(e).lower():
-                logger.warning(f"Model {self.model_name} not found. Attempting model rotation...")
+                logger.warning(
+                    f"Model {self.model_name} not found. Attempting model rotation..."
+                )
                 for fallback in self.fallback_models:
                     if fallback == self.model_name:
                         continue
@@ -170,7 +175,10 @@ class GeminiLLMProvider:
                         logger.info(f"Gemini: Rotating to {fallback}")
                         return await self._generate_internal(fallback, prompt)
                     except Exception as fallback_e:
-                        if "404" in str(fallback_e) or "not found" in str(fallback_e).lower():
+                        if (
+                            "404" in str(fallback_e)
+                            or "not found" in str(fallback_e).lower()
+                        ):
                             continue
                         raise
             raise
@@ -178,36 +186,40 @@ class GeminiLLMProvider:
     async def _generate_internal(self, model_name: str, prompt: str) -> str:
         """Internal helper to call Gemini with a specific model name."""
         try:
-            import google.generativeai as genai
-            client = genai.GenerativeModel(model_name=model_name)
-            response = await client.generate_content_async(
-                prompt,
-                generation_config={"response_mime_type": "application/json"},
+            from google.genai import types
+
+            response = await self.client.aio.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                ),
             )
-            return response.text
+            return response.text or ""
         except Exception as e:
             logger.debug(f"Gemini error with {model_name}: {e}")
             raise
 
     async def generate_stream(self, prompt: str) -> AsyncIterator[str]:
-        """Stream generation (simplified for now)."""
-        response = await self.client.generate_content_async(prompt, stream=True)
+        """Stream generation."""
+        response = await self.client.aio.models.generate_content(
+            model=self.model_name,
+            contents=prompt,
+            config={"stream": True}
+        )
         async for chunk in response:
-            yield chunk.text
+            yield chunk.text or ""
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings using Gemini."""
-        import google.generativeai as genai
-
-        # Note: 'models/text-embedding-004' is the current standard
-        # Use simple model name if provided in settings, 
-        # but genai.embed_content usually needs the full path or defaults.
-        result = genai.embed_content(
-            model="models/text-embedding-004",
-            content=texts,
-            task_type="retrieval_document",
+        # Note: 'text-embedding-004' is the current standard in v2 SDK
+        result = self.client.models.embed_content(
+            model="text-embedding-004",
+            contents=texts,
+            config={"task_type": "RETRIEVAL_DOCUMENT"},
         )
-        return result["embedding"]
+        # In v2, result.embeddings is a list of Embedding objects
+        return [e.values for e in result.embeddings]
 
 
 def get_llm(settings: Settings, fallback_to_mock: bool = False) -> LLMClient:
@@ -242,9 +254,7 @@ def get_llm(settings: Settings, fallback_to_mock: bool = False) -> LLMClient:
 
         if backend == "groq":
             if not settings.groq_api_key:
-                raise ValueError(
-                    "SOMAAI_GROQ_API_KEY is required for Groq backend"
-                )
+                raise ValueError("SOMAAI_GROQ_API_KEY is required for Groq backend")
             if not settings.groq_model:
                 raise ValueError("SOMAAI_GROQ_MODEL is required for Groq backend")
             return GroqLLMProvider(

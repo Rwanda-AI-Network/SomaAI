@@ -97,7 +97,10 @@ class EmbeddingCache:
                 return None
 
         except (asyncio.TimeoutError, Exception) as e:
-            logger.warning(f"Embedding cache get failed (timeout={isinstance(e, asyncio.TimeoutError)}): {e}")
+            logger.warning(
+                f"Embedding cache get failed "
+                f"(timeout={isinstance(e, asyncio.TimeoutError)}): {e}"
+            )
             return None
 
     @retry(
@@ -126,7 +129,10 @@ class EmbeddingCache:
                 )
 
         except (asyncio.TimeoutError, Exception) as e:
-            logger.warning(f"Embedding cache set failed (timeout={isinstance(e, asyncio.TimeoutError)}): {e}")
+            logger.warning(
+                f"Embedding cache set failed "
+                f"(timeout={isinstance(e, asyncio.TimeoutError)}): {e}"
+            )
 
 
 class ResponseCache:
@@ -214,7 +220,10 @@ class ResponseCache:
                 return None
 
         except (asyncio.TimeoutError, Exception) as e:
-            logger.warning(f"Response cache get failed (timeout={isinstance(e, asyncio.TimeoutError)}): {e}")
+            logger.warning(
+                f"Response cache get failed "
+                f"(timeout={isinstance(e, asyncio.TimeoutError)}): {e}"
+            )
             return None
 
     @retry(
@@ -276,7 +285,10 @@ class ResponseCache:
                 logger.info(f"Cached response with citations: {query[:50]}...")
 
         except (asyncio.TimeoutError, Exception) as e:
-            logger.warning(f"Response cache set failed (timeout={isinstance(e, asyncio.TimeoutError)}): {e}")
+            logger.warning(
+                f"Response cache set failed "
+                f"(timeout={isinstance(e, asyncio.TimeoutError)}): {e}"
+            )
 
     async def invalidate_pattern(self, pattern: str = "rag:resp:*") -> int:
         """Invalidate cache entries matching pattern."""

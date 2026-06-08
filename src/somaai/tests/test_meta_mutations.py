@@ -32,6 +32,9 @@ async def _cleanup_all():
     """Remove all seeded data."""
     from sqlalchemy import delete
 
+    from somaai.db.session import init_db
+
+    await init_db()
     async with async_session_maker() as db:
         await db.execute(delete(Topic))
         await db.execute(delete(CurriculumMetadata))
@@ -52,9 +55,8 @@ class TestMetaMutations:
     # --- Grades ---
 
     def test_create_grade(self, client: TestClient):
-        """POST /meta/grades — create a new grade."""
+        """POST /meta/metadata — create a new grade."""
         payload = {
-            "id": "T1",
             "name": "Test Grade",
             "type": "grade",
             "key": "T1",
@@ -63,7 +65,8 @@ class TestMetaMutations:
         response = client.post("/api/v1/meta/metadata", json=payload)
         assert response.status_code == 201
         data = response.json()
-        assert data["id"] == "T1"
+        assert isinstance(data["id"], str)
+        assert data["key"] == "T1"
         assert data["name"] == "Test Grade"
 
         # Verify it exists
@@ -71,22 +74,23 @@ class TestMetaMutations:
         assert any(g["key"] == "T1" for g in get_resp.json())
 
     def test_update_grade(self, client: TestClient):
-        """PATCH /meta/grades/{id} — update a grade."""
-        # Setup
+        """PATCH /meta/metadata/{id} — update a grade."""
         _run(_cleanup_all())
-        client.post(
+        create_resp = client.post(
             "/api/v1/meta/metadata",
             json={
-                "id": "T1",
                 "name": "Old Name",
                 "type": "grade",
-            "key": "T1",
+                "key": "T1",
                 "display_order": 1,
             },
         )
+        created_id = create_resp.json()["id"]
 
-        # Update
-        response = client.patch("/api/v1/meta/metadata/T1", json={"name": "New Name"})
+        # Update using the server-generated ID
+        response = client.patch(
+            f"/api/v1/meta/metadata/{created_id}", json={"name": "New Name"}
+        )
         assert response.status_code == 200
         assert response.json()["name"] == "New Name"
 
@@ -95,15 +99,20 @@ class TestMetaMutations:
         assert any(g["name"] == "New Name" for g in get_resp.json())
 
     def test_delete_grade(self, client: TestClient):
-        """DELETE /meta/grades/{id} — delete a grade."""
-        # Setup
-        client.post(
+        """DELETE /meta/metadata/{id} — delete a grade."""
+        create_resp = client.post(
             "/api/v1/meta/metadata",
-            json={"id": "T1", "name": "Test", "level": "primary", "display_order": 1},
+            json={
+                "name": "Test",
+                "type": "grade",
+                "key": "T1",
+                "display_order": 1,
+            },
         )
+        created_id = create_resp.json()["id"]
 
-        # Delete
-        response = client.delete("/api/v1/meta/metadata/T1")
+        # Delete using the server-generated ID
+        response = client.delete(f"/api/v1/meta/metadata/{created_id}")
         assert response.status_code == 204
 
         # Verify it's gone
@@ -113,33 +122,42 @@ class TestMetaMutations:
     # --- Subjects ---
 
     def test_create_subject(self, client: TestClient):
-        """POST /meta/subjects — create a new subject."""
+        """POST /meta/metadata — create a new subject."""
         payload = {
-            "type": "subject", "key": "test_subj",
+            "type": "subject",
+            "key": "test_subj",
             "name": "Test Subject",
-                        "display_order": 50,
+            "display_order": 50,
         }
         response = client.post("/api/v1/meta/metadata", json=payload)
         assert response.status_code == 201
-        assert response.json()["id"] == "test_subj"
+        data = response.json()
+        assert isinstance(data["id"], str)
+        assert data["key"] == "test_subj"
 
     def test_update_subject(self, client: TestClient):
-        """PATCH /meta/subjects/{id} — update a subject."""
-        client.post(
+        """PATCH /meta/metadata/{id} — update a subject."""
+        create_resp = client.post(
             "/api/v1/meta/metadata",
             json={"type": "subject", "key": "ts", "name": "Old", "display_order": 1},
         )
-        response = client.patch("/api/v1/meta/metadata/ts", json={"name": "New"})
+        created_id = create_resp.json()["id"]
+
+        response = client.patch(
+            f"/api/v1/meta/metadata/{created_id}", json={"name": "New"}
+        )
         assert response.status_code == 200
         assert response.json()["name"] == "New"
 
     def test_delete_subject(self, client: TestClient):
-        """DELETE /meta/subjects/{id} — delete a subject."""
-        client.post(
+        """DELETE /meta/metadata/{id} — delete a subject."""
+        create_resp = client.post(
             "/api/v1/meta/metadata",
             json={"type": "subject", "key": "ts", "name": "Old", "display_order": 1},
         )
-        assert client.delete("/api/v1/meta/metadata/ts").status_code == 204
+        created_id = create_resp.json()["id"]
+
+        assert client.delete(f"/api/v1/meta/metadata/{created_id}").status_code == 204
         assert client.get("/api/v1/meta/metadata").json() == []
 
     # --- Topics ---
