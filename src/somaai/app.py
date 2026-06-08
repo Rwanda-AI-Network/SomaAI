@@ -21,19 +21,13 @@ async def lifespan(app: FastAPI):
     startup_logger = logging.getLogger("somaai.startup")
 
     # --- Automated Database Management ---
-    if not settings.is_testing:
-        from scripts.seed_meta import main as seed_main
-        from somaai.db.migrations.auto import run_auto_migrations
-
-        # Run Alembic migrations (Sync)
-        run_auto_migrations()
-
-        # Run Seeding (Async)
-        await seed_main()
-        startup_logger.info("Database schema and metadata are up to date.")
-    else:
+    if settings.is_testing:
         # In tests, we still use create_all for speed (with aiosqlite memory)
         await init_db()
+    else:
+        # In production/dev, we assume migrations were run by the init container/make dev
+        # But we still initialize the embedding singleton
+        startup_logger.info("Application starting in %s mode", settings.env.value)
 
     # Security audit: warn if API key auth is disabled in non-debug mode
     if not settings.require_api_key and not settings.debug:

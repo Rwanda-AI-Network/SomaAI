@@ -154,6 +154,8 @@ class Settings(BaseSettings):
             if not self.is_sqlite:
                 self.database_url = "sqlite+aiosqlite:///:memory:"
                 logger.info("Forcing SQLite in-memory for testing")
+            # Always disable API keys for developer unit tests
+            self.require_api_key = False
 
         if self.is_production:
             if self.is_sqlite:
@@ -171,6 +173,14 @@ class Settings(BaseSettings):
                     "⚠️  SOMAAI_SESSION_COOKIE_SECURE is False in production — "
                     "cookies will be sent over HTTP."
                 )
+            # Security Hardening: Never allow default MinIO credentials in production
+            if self.storage_backend == "minio":
+                if self.minio_access_key == "minioadmin":
+                    raise ValueError(
+                        "Insecure default MinIO credentials ('minioadmin') are prohibited in production. "
+                        "Set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD for the minio service, "
+                        "and SOMAAI_MINIO_ACCESS_KEY/SOMAAI_MINIO_SECRET_KEY for the app."
+                    )
 
         if self.debug:
             db_host = (

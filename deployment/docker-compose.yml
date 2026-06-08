@@ -19,8 +19,8 @@ services:
       - SOMAAI_QDRANT_URL=http://qdrant:6333
       - SOMAAI_MINIO_ENDPOINT=minio:9000
     depends_on:
-      db:
-        condition: service_healthy
+      init-db:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       qdrant:
@@ -57,8 +57,8 @@ services:
       - SOMAAI_QDRANT_URL=http://qdrant:6333
       - SOMAAI_MINIO_ENDPOINT=minio:9000
     depends_on:
-      db:
-        condition: service_healthy
+      init-db:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     networks:
@@ -73,6 +73,22 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  init-db:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: rwandaainetwork/somaai:0.1.1
+    command: bash /app/scripts/db_init.sh
+    env_file:
+      - .env
+    environment:
+      - SOMAAI_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-somaai}:${POSTGRES_PASSWORD:-somaai}@db:5432/${POSTGRES_DB:-somaai}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - somaai-network
 
   # --- Infrastructure ---
   db:
@@ -99,7 +115,7 @@ services:
     # No ports exposed to host in production
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory-policy allkeys-lru --save 60 1
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
@@ -135,10 +151,11 @@ services:
     volumes:
       - minio_data:/data
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      test: ["CMD-SHELL", "(curl -f http://localhost:9000/minio/health/live) || exit 1"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 5
+      start_period: 10s
     networks:
       - somaai-network
 
