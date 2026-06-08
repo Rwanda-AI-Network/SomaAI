@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     debug: bool = False
     host: str = "0.0.0.0"
     port: int = 8000
-    version: str = "0.1.0"
+    version: str = "0.1.1"
 
     # Database
     database_url: str = Field(

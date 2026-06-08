@@ -15,7 +15,9 @@ def setup_middleware(app: FastAPI) -> None:
 
     # Handle CORS with an architectural decision for development vs production:
     # If allow_origins contains "*", we use allow_origin_regex to support credentials.
-    cors_params = {
+    from typing import Any
+    
+    cors_params: dict[str, Any] = {
         "allow_credentials": settings.cors_allow_credentials,
         "allow_methods": ["*"],
         "allow_headers": ["*"],

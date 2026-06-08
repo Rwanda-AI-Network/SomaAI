@@ -1,9 +1,9 @@
-"""Embeddings provider factory."""
-
 from __future__ import annotations
 
 import asyncio
 import logging
+import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from langchain_core.embeddings import Embeddings
@@ -50,7 +50,23 @@ class ThreadSafeEmbeddings(Embeddings):
 
 
 # Singleton embeddings model (wrapped for thread safety)
-_EMBEDDINGS_MODEL: ThreadSafeEmbeddings | None = None
+_EMBEDDINGS_MODEL: ThreadSafeEmbeddings | Embeddings | None = None
+
+
+class MockEmbeddings(Embeddings):
+    """Zero-overhead embeddings for tests (prevents model downloads in CI)."""
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [[0.0] * 384 for _ in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return [0.0] * 384
+
+    async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
+        return self.embed_documents(texts)
+
+    async def aembed_query(self, text: str) -> list[float]:
+        return self.embed_query(text)
 
 
 def get_embeddings(settings: Settings) -> ThreadSafeEmbeddings:
@@ -67,13 +83,11 @@ def get_embeddings(settings: Settings) -> ThreadSafeEmbeddings:
     """
     global _EMBEDDINGS_MODEL
     if _EMBEDDINGS_MODEL is None:
-        # if settings.openai_api_key:
-        #     logger.info("Creating OpenAI embeddings model")
-        #     inner = OpenAIEmbeddings(
-        #         api_key=settings.openai_api_key.get_secret_value(),
-        #         model="text-embedding-3-small",
-        #     )
-        # else:
+        if settings.is_testing:
+            logger.info("Using MockEmbeddings (CI/CD optimized)")
+            _EMBEDDINGS_MODEL = MockEmbeddings()
+            return _EMBEDDINGS_MODEL
+
         logger.info("Creating HuggingFace embeddings model (local)")
         inner = HuggingFaceEmbeddings(
             model_name="all-MiniLM-L6-v2",
