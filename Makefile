@@ -102,6 +102,8 @@ docker-clean:
 docker-logs:
 	docker-compose -f deployment/docker-compose.yml logs -f
 
+logs: docker-logs
+
 # --- Database & Seeds ---
 
 seed-meta:

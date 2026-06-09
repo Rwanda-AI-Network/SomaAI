@@ -18,6 +18,8 @@ services:
       - SOMAAI_REDIS_CACHE_URL=redis://redis:6379/2
       - SOMAAI_QDRANT_URL=http://qdrant:6333
       - SOMAAI_MINIO_ENDPOINT=minio:9000
+      - SOMAAI_MINIO_ACCESS_KEY=${SOMAAI_MINIO_ACCESS_KEY}
+      - SOMAAI_MINIO_SECRET_KEY=${SOMAAI_MINIO_SECRET_KEY}
     depends_on:
       init-db:
         condition: service_completed_successfully
@@ -56,6 +58,8 @@ services:
       - SOMAAI_REDIS_CACHE_URL=redis://redis:6379/2
       - SOMAAI_QDRANT_URL=http://qdrant:6333
       - SOMAAI_MINIO_ENDPOINT=minio:9000
+      - SOMAAI_MINIO_ACCESS_KEY=${SOMAAI_MINIO_ACCESS_KEY}
+      - SOMAAI_MINIO_SECRET_KEY=${SOMAAI_MINIO_SECRET_KEY}
     depends_on:
       init-db:
         condition: service_completed_successfully
@@ -86,6 +90,8 @@ services:
       - .env
     environment:
       - SOMAAI_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-somaai}:${POSTGRES_PASSWORD:-somaai}@db:5432/${POSTGRES_DB:-somaai}
+      - SOMAAI_MINIO_ACCESS_KEY=${SOMAAI_MINIO_ACCESS_KEY}
+      - SOMAAI_MINIO_SECRET_KEY=${SOMAAI_MINIO_SECRET_KEY}
     depends_on:
       db:
         condition: service_healthy
